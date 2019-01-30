@@ -35,7 +35,7 @@ const (
 				"OSProjectID":"00000000000000000000000000"
 			 }
 
-			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspUIInst -createses -action apply -auth openstack.json
+			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspuiinst -createses -action apply -auth openstack.json
 			 `
 )
 
