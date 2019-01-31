@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"mkcaasp/utilities"
 )
@@ -93,7 +92,8 @@ func main() {
 			fmt.Printf("%s\n", err)
 		}
 		// wait for velum initialization
-		time.Sleep(5 * time.Minute)
+		velumURL := fmt.Sprintf("https://%s.nip.io", a.CAASPIPAdminExt.Value)
+		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utilities.CheckVelumUp(velumURL))
 		utilities.InstallUI(&a)
 	}
 }

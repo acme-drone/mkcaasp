@@ -2,13 +2,17 @@ package utilities
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 // SetOSEnv sets up Openstack environment variables
@@ -94,4 +98,34 @@ func CmdRun(dir, openstackAPIauth, command string) (string, string) {
 	}
 	outstd, outstderr := RunScript(command, env)
 	return outstd, outstderr
+}
+
+// CheckVelumUp returns Velum worm up time in Seconds
+func CheckVelumUp(page string) float64 {
+	t := time.Now()
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequest(http.MethodGet, page, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req = req.WithContext(ctx)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	var DefaultClient = &http.Client{Transport: tr}
+	var resp *http.Response
+	for {
+		resp, err = DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			time.Sleep(10 * time.Second)
+			continue
+		} else {
+			break
+		}
+	}
+	defer resp.Body.Close()
+
+	return time.Since(t).Seconds()
 }

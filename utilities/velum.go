@@ -47,13 +47,13 @@ func InstallUI(nodes *CAASPTFOutput) {
 	if err := page.FindByClass("btn-primary").Click(); err != nil {
 		log.Fatal("Setup - Next failed:", err)
 	}
-	time.Sleep(60 * time.Second)
+	machines := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
+	time.Sleep(time.Duration(machines) * 20 * time.Second)
 	if err := page.FindByID("accept-all").Click(); err != nil {
 		log.Fatal("Accepting nodes failed:", err)
 	}
-	time.Sleep(30 * time.Second)
-	time.Sleep(4 * time.Second)
-	for i := 2; i < len(nodes.IPMastersExt.Value)+len(nodes.IPWorkersExt.Value)+2; i++ {
+	time.Sleep(time.Duration(machines) * 20 * time.Second)
+	for i := 2; i < machines+2; i++ {
 		path := fmt.Sprintf("//tr[@class='minion_%d']", i)
 		text, err := page.FindByXPath(path).Text()
 		if err != nil {
