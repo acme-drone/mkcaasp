@@ -22,6 +22,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 	if err != nil {
 		log.Fatal("Failed to open page:", err)
 	}
+	t := time.Now()
 	if err := page.Navigate(fmt.Sprintf("https://%v.nip.io/users/sign_up", nodes.CAASPIPAdminExt.Value)); err != nil {
 		log.Fatal("Failed to navigate:", err)
 	}
@@ -120,7 +121,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 	selection := page.All(".fa-check-circle-o")
 	count, _ := selection.Count()
 	if count == machines {
-		log.Printf("Bootstrap Successful\n")
+		log.Printf("Bootstrap Successful, bootstrap time: %v\n", time.Since(t).Minutes())
 	} else {
 		log.Fatal("Bootstrap failed")
 	}
