@@ -11,6 +11,9 @@ import (
 
 // InstallUI handles Velum interactions
 func InstallUI(nodes *CAASPTFOutput) {
+	go func() {
+		log.Println("Bootstrapping the cluster")
+	}()
 	driver := agouti.ChromeDriver()
 	if err := driver.Start(); err != nil {
 		log.Fatal("Failed to start ChromeDriver:", err)
@@ -19,7 +22,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 	if err != nil {
 		log.Fatal("Failed to open page:", err)
 	}
-	if err := page.Navigate(fmt.Sprintf("https://%v/users/sign_up", nodes.CAASPIPAdminExt.Value)); err != nil {
+	if err := page.Navigate(fmt.Sprintf("https://%v.nip.io/users/sign_up", nodes.CAASPIPAdminExt.Value)); err != nil {
 		log.Fatal("Failed to navigate:", err)
 	}
 	if err := page.FindByID("user_email").Fill("test@test.com"); err != nil {
@@ -34,6 +37,9 @@ func InstallUI(nodes *CAASPTFOutput) {
 	if err := page.FindByClass("btn-block").Click(); err != nil {
 		log.Fatal("Creating Admin Failed:", err)
 	}
+	go func() {
+		log.Printf("Admin user created test@test.com/123456789\n")
+	}()
 	time.Sleep(4 * time.Second)
 	if err := page.FindByID("settings_dashboard").Fill(nodes.CAASPIPAdminInt.Value); err != nil {
 		log.Fatal("Failed inserting Internal Dashboard Location:", err)
@@ -44,6 +50,9 @@ func InstallUI(nodes *CAASPTFOutput) {
 	if err := page.FindByName("commit").Click(); err != nil {
 		log.Fatal("Setup - Next failed:", err)
 	}
+	go func() {
+		log.Printf("Fill Admin internal ip: %s; selected Tiller\n", nodes.CAASPIPAdminInt.Value)
+	}()
 	if err := page.FindByClass("btn-primary").Click(); err != nil {
 		log.Fatal("Setup - Next failed:", err)
 	}
@@ -72,8 +81,10 @@ func InstallUI(nodes *CAASPTFOutput) {
 				log.Fatal(err)
 			}
 		}
-
 	}
+	go func() {
+		log.Printf("Node discovery finished; roles assigned\n\t\tMasters: %v\n\t\tWorkers: %v\n", nodes.IPMastersExt, nodes.IPWorkersExt)
+	}()
 	time.Sleep(4 * time.Second)
 	a := fmt.Sprintf("//*[contains(@class,'steps-container')]/*[contains(@id,'set-roles')]")
 	err = page.FindByXPath(a).Click()
@@ -109,7 +120,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 	selection := page.All(".fa-check-circle-o")
 	count, _ := selection.Count()
 	if count == machines {
-		fmt.Println("Bootstrap Successful")
+		log.Printf("Bootstrap Successful\n")
 	} else {
 		log.Fatal("Bootstrap failed")
 	}

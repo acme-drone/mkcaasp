@@ -95,5 +95,7 @@ func main() {
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.CAASPIPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utilities.CheckVelumUp(velumURL))
 		utilities.InstallUI(&a)
+		utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
+		fmt.Fprintf(os.Stdout, "%v\n", velumURL)
 	}
 }
