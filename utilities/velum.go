@@ -48,7 +48,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 		log.Fatal("Setup - Next failed:", err)
 	}
 	machines := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
-	time.Sleep(time.Duration(machines) * 20 * time.Second)
+	time.Sleep(time.Duration(machines) * time.Minute)
 	if err := page.FindByID("accept-all").Click(); err != nil {
 		log.Fatal("Accepting nodes failed:", err)
 	}
@@ -95,5 +95,22 @@ func InstallUI(nodes *CAASPTFOutput) {
 	err = page.FindByXPath(a).Click()
 	if err != nil {
 		log.Fatal(err)
+	}
+	time.Sleep(5 * time.Second)
+	for {
+		time.Sleep(30 * time.Second)
+		selection := page.All(".fa-check-circle-o, .fa-times-circle")
+		count, _ := selection.Count()
+		if count == machines {
+			break
+		}
+	}
+	// Check if bootstrap was successfull
+	selection := page.All(".fa-check-circle-o")
+	count, _ := selection.Count()
+	if count == machines {
+		fmt.Println("Bootstrap Successful")
+	} else {
+		log.Fatal("Bootstrap failed")
 	}
 }
