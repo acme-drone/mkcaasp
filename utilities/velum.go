@@ -128,4 +128,7 @@ func InstallUI(nodes *CAASPTFOutput) {
 	} else {
 		log.Fatal("Bootstrap failed")
 	}
+	if err := driver.Stop(); err != nil {
+		log.Fatal("Failed to strop ChromeDriver:", err)
+	}
 }
