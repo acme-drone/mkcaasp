@@ -116,6 +116,9 @@ func InstallUI(nodes *CAASPTFOutput) {
 		if count == machines {
 			break
 		}
+		go func() {
+			log.Printf("Bootstrapping cluster for %v seconds now", time.Since(t).Seconds())
+		}()
 	}
 	// Check if bootstrap was successfull
 	selection := page.All(".fa-check-circle-o")

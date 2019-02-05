@@ -63,6 +63,21 @@ func main() {
 		utilities.CmdRun("caasp-openstack-terraform", *openstack, fmt.Sprintf(command, *action))
 	}
 	os.Chdir(*home)
+	if *caaspUIInst {
+		out, _ := utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
+		a := utilities.CAASPTFOutput{}
+		err := json.Unmarshal([]byte(out), &a)
+		if err != nil {
+			fmt.Printf("%s\n", err)
+		}
+		// wait for velum initialization
+		velumURL := fmt.Sprintf("https://%s.nip.io", a.CAASPIPAdminExt.Value)
+		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utilities.CheckVelumUp(velumURL))
+		utilities.InstallUI(&a)
+		utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
+		fmt.Fprintf(os.Stdout, "%v\n", velumURL)
+	}
+	os.Chdir(*home)
 	if *ses {
 		utilities.TfInit("ses-openstack-terraform")
 		utilities.CmdRun("ses-openstack-terraform", *openstack, fmt.Sprintf(command, *action))
@@ -82,20 +97,5 @@ func main() {
 		s := a.K8SStorageClass.Value
 		fmt.Println(a.SESIPAdminExt.Value, a.SESIPAdminInt.Value, a.SESIPMonsExt.Value, a.SESIPMonsExt.Value, a.SESIPOsdsInt.Value, "\n", a.K8SCephSecret.Value, "\n", fmt.Sprintf("%s", s[0]))
 
-	}
-	os.Chdir(*home)
-	if *caaspUIInst {
-		out, _ := utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
-		a := utilities.CAASPTFOutput{}
-		err := json.Unmarshal([]byte(out), &a)
-		if err != nil {
-			fmt.Printf("%s\n", err)
-		}
-		// wait for velum initialization
-		velumURL := fmt.Sprintf("https://%s.nip.io", a.CAASPIPAdminExt.Value)
-		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utilities.CheckVelumUp(velumURL))
-		utilities.InstallUI(&a)
-		utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
-		fmt.Fprintf(os.Stdout, "%v\n", velumURL)
 	}
 }
