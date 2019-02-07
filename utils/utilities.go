@@ -1,23 +1,19 @@
-package utilities
+package utils
 
 import (
 	"bytes"
-	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 )
 
 // SetOSEnv sets up Openstack environment variables
 func SetOSEnv(file string) (EnvOS, error) {
-	var auth = OpenStackAPI{}
+	var auth = OSAPI{}
 	f, err := os.Open(file)
 	defer f.Close()
 	if err != nil {
@@ -27,15 +23,15 @@ func SetOSEnv(file string) (EnvOS, error) {
 		return nil, err
 	}
 	env := EnvOS{
-		"OS_AUTH_URL=" + auth.OSAuthURL,
-		"OS_REGION_NAME=" + auth.OSRegionName,
-		"OS_PROJECT_NAME=" + auth.OSProjectName,
-		"OS_USER_DOMAIN_NAME=" + auth.OSUserDomainName,
-		"OS_IDENTITY_API_VERSION=" + auth.OSIdentityAPIVersion,
-		"OS_INTERFACE=" + auth.OSInterface,
-		"OS_USERNAME=" + auth.OSUsername,
-		"OS_PASSWORD=" + auth.OSPassword,
-		"OS_PROJECT_ID=" + auth.OSProjectID,
+		"OS_AUTH_URL=" + auth.AuthURL,
+		"OS_REGION_NAME=" + auth.RegionName,
+		"OS_PROJECT_NAME=" + auth.ProjectName,
+		"OS_USER_DOMAIN_NAME=" + auth.UserDomainName,
+		"OS_IDENTITY_API_VERSION=" + auth.IdentityAPIVersion,
+		"OS_INTERFACE=" + auth.Interface,
+		"OS_USERNAME=" + auth.Username,
+		"OS_PASSWORD=" + auth.Password,
+		"OS_PROJECT_ID=" + auth.ProjectID,
 	}
 	return env, nil
 }
@@ -98,34 +94,4 @@ func CmdRun(dir, openstackAPIauth, command string) (string, string) {
 	}
 	outstd, outstderr := RunScript(command, env)
 	return outstd, outstderr
-}
-
-// CheckVelumUp returns Velum worm up time in Seconds
-func CheckVelumUp(page string) float64 {
-	t := time.Now()
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	req, err := http.NewRequest(http.MethodGet, page, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req = req.WithContext(ctx)
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	var DefaultClient = &http.Client{Transport: tr}
-	var resp *http.Response
-	for {
-		resp, err = DefaultClient.Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			time.Sleep(10 * time.Second)
-			continue
-		} else {
-			break
-		}
-	}
-	defer resp.Body.Close()
-
-	return time.Since(t).Seconds()
 }

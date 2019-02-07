@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"mkcaasp/utilities"
+	"mkcaasp/utils"
 )
 
 const (
@@ -16,22 +16,20 @@ const (
 			 git clone https://github.com/kubic-project/automation.git
 			 
 			 cd automation
-			 
-			 run terraform init in the directories you want to use, for example in caasp-openstack-terraform and/or ses-openstack-terraform
 
-			 put openstack.json in the directories you want to use, for example in caasp-openstack-terraform and/or ses-openstack-terraform
+			 put openstack.json in the directories you want to use, for example in caaspDir and/or sesDir
 			 
-			 openstack.json (should reside in caasp-openstack-terraform and ses-openstack-terraform folders) should look like this:
+			 openstack.json (should reside in caaspDir and sesDir folders) should look like this:
 			 {
-				"OSAuthURL":"https://smtg:5000/v3",
-				"OSRegionName":"Region",
-				"OSProjectName":"caasp",
-				"OSUserDomainName":"users",
-				"OSIdentityAPIVersion":"3",
-				"OSInterface":"public",
-				"OSUsername":"user",
-				"OSPassword":"pass",
-				"OSProjectID":"00000000000000000000000000"
+				"AuthURL":"https://smtg:5000/v3",
+				"RegionName":"Region",
+				"ProjectName":"caasp",
+				"UserDomainName":"users",
+				"IdentityAPIVersion":"3",
+				"Interface":"public",
+				"Username":"user",
+				"Password":"pass",
+				"ProjectID":"00000000000000000000000000"
 			 }
 
 			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspuiinst -createses -action apply -auth openstack.json
@@ -51,6 +49,11 @@ var (
 	home = flag.String("repo", "automation", "kubic automation repo location")
 )
 
+const (
+	caaspDir = "caasp-openstack-terraform"
+	sesDir   = "ses-openstack-terraform"
+)
+
 func main() {
 	flag.Parse()
 	if *howto {
@@ -59,43 +62,43 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *caasp {
-		utilities.TfInit("caasp-openstack-terraform")
-		utilities.CmdRun("caasp-openstack-terraform", *openstack, fmt.Sprintf(command, *action))
+		utils.TfInit(caaspDir)
+		utils.CmdRun(caaspDir, *openstack, fmt.Sprintf(command, *action))
 	}
 	os.Chdir(*home)
 	if *caaspUIInst {
-		out, _ := utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
-		a := utilities.CAASPTFOutput{}
+		out, _ := utils.CmdRun(caaspDir, *openstack, "terraform output -json")
+		a := utils.CAASPOut{}
 		err := json.Unmarshal([]byte(out), &a)
 		if err != nil {
 			fmt.Printf("%s\n", err)
 		}
 		// wait for velum initialization
-		velumURL := fmt.Sprintf("https://%s.nip.io", a.CAASPIPAdminExt.Value)
-		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utilities.CheckVelumUp(velumURL))
-		utilities.InstallUI(&a)
-		utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
+		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
+		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
+		utils.InstallUI(&a)
+		utils.CmdRun(caaspDir, *openstack, "terraform output -json")
 		fmt.Fprintf(os.Stdout, "%v\n", velumURL)
 	}
 	os.Chdir(*home)
 	if *ses {
-		utilities.TfInit("ses-openstack-terraform")
-		utilities.CmdRun("ses-openstack-terraform", *openstack, fmt.Sprintf(command, *action))
+		utils.TfInit(sesDir)
+		utils.CmdRun(sesDir, *openstack, fmt.Sprintf(command, *action))
 	}
 	os.Chdir(*home)
 	if *caasptfoutput {
-		utilities.CmdRun("caasp-openstack-terraform", *openstack, "terraform output -json")
+		utils.CmdRun(caaspDir, *openstack, "terraform output -json")
 	}
 	os.Chdir(*home)
 	if *sestfoutput {
-		out, _ := utilities.CmdRun("ses-openstack-terraform", *openstack, "terraform output -json")
-		a := utilities.SESTFOutput{}
+		out, _ := utils.CmdRun(sesDir, *openstack, "terraform output -json")
+		a := utils.SESOut{}
 		err := json.Unmarshal([]byte(out), &a)
 		if err != nil {
 			fmt.Printf("%s\n", err)
 		}
-		s := a.K8SStorageClass.Value
-		fmt.Println(a.SESIPAdminExt.Value, a.SESIPAdminInt.Value, a.SESIPMonsExt.Value, a.SESIPMonsExt.Value, a.SESIPOsdsInt.Value, "\n", a.K8SCephSecret.Value, "\n", fmt.Sprintf("%s", s[0]))
+		s := a.K8SSC.Value
+		fmt.Println(a.IPAdminExt.Value, a.IPAdminInt.Value, a.IPMonsExt.Value, a.IPMonsExt.Value, a.IPOsdsInt.Value, "\n", a.K8SCS.Value, "\n", fmt.Sprintf("%s", s[0]))
 
 	}
 }
