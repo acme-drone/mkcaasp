@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"mkcaasp/utils"
@@ -52,6 +53,7 @@ var (
 const (
 	caaspDir = "caasp-openstack-terraform"
 	sesDir   = "ses-openstack-terraform"
+	output   = "terraform output -json"
 )
 
 func main() {
@@ -67,18 +69,15 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *caaspUIInst {
-		out, _ := utils.CmdRun(caaspDir, *openstack, "terraform output -json")
+		out, _ := utils.CmdRun(caaspDir, *openstack, output)
 		a := utils.CAASPOut{}
 		err := json.Unmarshal([]byte(out), &a)
 		if err != nil {
-			fmt.Printf("%s\n", err)
+			log.Fatal(err)
 		}
-		// wait for velum initialization
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
 		utils.InstallUI(&a)
-		utils.CmdRun(caaspDir, *openstack, "terraform output -json")
-		fmt.Fprintf(os.Stdout, "%v\n", velumURL)
 	}
 	os.Chdir(*home)
 	if *ses {
@@ -87,11 +86,11 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *caasptfoutput {
-		utils.CmdRun(caaspDir, *openstack, "terraform output -json")
+		utils.CmdRun(caaspDir, *openstack, output)
 	}
 	os.Chdir(*home)
 	if *sestfoutput {
-		out, _ := utils.CmdRun(sesDir, *openstack, "terraform output -json")
+		out, _ := utils.CmdRun(sesDir, *openstack, output)
 		a := utils.SESOut{}
 		err := json.Unmarshal([]byte(out), &a)
 		if err != nil {

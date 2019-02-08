@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -24,11 +26,10 @@ func InstallUI(nodes *CAASPOut) {
 	go func() {
 		log.Println("Bootstrapping the cluster")
 	}()
-	// Uncomment for disabling headless
-	driver := agouti.ChromeDriver()
-	//driver := agouti.ChromeDriver(
-	//	agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}),
-	//)
+	//driver := agouti.ChromeDriver()
+	driver := agouti.ChromeDriver(
+		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}),
+	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
 	}
@@ -38,6 +39,7 @@ func InstallUI(nodes *CAASPOut) {
 	}
 	t := time.Now()
 	page.Session().SetImplicitWait(1000)
+
 	if err := page.Navigate(fmt.Sprintf("https://%v.%s/users/sign_up", nodes.IPAdminExt.Value, domain)); err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +58,7 @@ func InstallUI(nodes *CAASPOut) {
 	go func() {
 		log.Printf("Admin user created %s %s\n", user, passwd)
 	}()
-	page.Session().SetImplicitWait(3000)
+	page.Session().SetImplicitWait(5 * 1000)
 	if err := page.Find("#settings_dashboard").Fill(nodes.IPAdminInt.Value); err != nil {
 		log.Fatal(err)
 	}
@@ -132,7 +134,6 @@ func InstallUI(nodes *CAASPOut) {
 			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
 		}()
 	}
-	// Check if bootstrap was successfull
 	selection := page.All(".fa-check-circle-o")
 	count, _ := selection.Count()
 	if count == hosts {
@@ -140,9 +141,49 @@ func InstallUI(nodes *CAASPOut) {
 	} else {
 		log.Fatal("Bootstrap failed")
 	}
+	page.Session().SetImplicitWait(3 * 1000)
+	err = page.All(".panel-heading #download-kubeconfig").Click()
+	if err != nil {
+		log.Fatal(err)
+	}
+	page.Session().SetImplicitWait(5 * 1000)
+	if err := page.Find("#login").Fill(user); err != nil {
+		log.Fatal(err)
+	}
+	if err := page.Find("#password").Fill(passwd); err != nil {
+		log.Fatal(err)
+	}
+	if err := page.Find(".theme-btn--primary").Click(); err != nil {
+		log.Fatal(err)
+	}
+	kube, err := page.Find("a[href^=\"https\"]").Attribute("href")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = Download(kube)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := driver.Stop(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Download downloads the kubeconfig file
+func Download(url string) error {
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	out, err := os.Create("kubeconfig")
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 // CheckVelumUp returns Velum worm up time in Seconds
