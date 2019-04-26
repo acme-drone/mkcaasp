@@ -95,3 +95,21 @@ func CmdRun(dir, openstackAPIauth, command string) (string, string) {
 	outstd, outstderr := RunScript(command, env)
 	return outstd, outstderr
 }
+
+func Hashinator(s string, caasporsespdir string) {
+	h := md5.New()
+	h.Write([]byte(s))
+
+	f, err := ioutil.ReadFile(caasporsespdir + "/openstack.json")
+	if err != nil {
+		fmt.Printf("Error at opening json file!...%s", err)
+	}
+
+	if strings.Contains(string(f), ":\"pass\",") || strings.Contains(string(f), "\"Password\":\"\",") {
+		f = []byte(strings.Replace(string(f), "pass", hex.EncodeToString(h.Sum(nil)), -1))
+		err = ioutil.WriteFile(caasporsespdir+"/openstack.json", f, 0644)
+		if err != nil {
+			fmt.Printf("Error at writing to json file!...%s", err)
+		}
+	}
+}
