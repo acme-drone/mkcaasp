@@ -32,6 +32,8 @@ const (
 				"ProjectID":"00000000000000000000000000"
 			 }
 
+			 create in the $HOME/automation directory a file named key.json containing just a string "<your key for encrypting password>"
+			 in order to put your hashed password in openstack.json, run the 1st time caasp -hash <password>
 			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspuiinst -createses -action apply -auth openstack.json
 			 `
 )
@@ -63,7 +65,10 @@ func main() {
 		os.Exit(0)
 	}
 	if *pass != "password" {
-		utils.Hashinator(*pass, *home+"/"+caaspDir)
+		utils.Hashinator(*pass, *home, caaspDir)
+		//fmt.Println(utils.Dehashinator(*home, caaspDir))
+		env, _ := utils.SetOSEnv("/home/atighineanu/work/CaaSP_kube/automation/caasp-openstack-terraform/openstack.json")
+		fmt.Println(env)
 	}
 	os.Chdir(*home)
 	if *caasp {
