@@ -9,7 +9,7 @@ type OSAPI struct {
 	IdentityAPIVersion string
 	Interface          string
 	Username           string
-	Password           string
+	Password           []byte
 	ProjectID          string
 }
 
