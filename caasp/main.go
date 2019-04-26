@@ -5,9 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-
 	"mkcaasp/utils"
+	"os"
 )
 
 const (
@@ -48,6 +47,7 @@ var (
 	caaspUIInst   = flag.Bool("caaspuiinst", false, "Configures caasp using Velum UI")
 
 	home = flag.String("repo", "automation", "kubic automation repo location")
+	pass = flag.String("hash", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
 )
 
 const (
@@ -61,6 +61,9 @@ func main() {
 	if *howto {
 		fmt.Fprintf(os.Stdout, "%v\n", howtouse)
 		os.Exit(0)
+	}
+	if *pass != "password" {
+		utils.Hashinator(*pass, *home+"/"+caaspDir)
 	}
 	os.Chdir(*home)
 	if *caasp {
