@@ -20,15 +20,13 @@ const (
 	passwd = "123456789"
 )
 
-// InstallUI handles Velum interactions
-func InstallUI(nodes *CAASPOut) {
-	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
+func CreateAcc(nodes *CAASPOut) {
 	go func() {
 		log.Println("Bootstrapping the cluster")
 	}()
 	//driver := agouti.ChromeDriver()
 	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}),
+		agouti.ChromeOptions("args", []string{"--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
 	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
@@ -37,8 +35,7 @@ func InstallUI(nodes *CAASPOut) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	t := time.Now()
-	page.Session().SetImplicitWait(1000)
+	page.Session().SetImplicitWait(3000)
 
 	if err := page.Navigate(fmt.Sprintf("https://%v.%s/users/sign_up", nodes.IPAdminExt.Value, domain)); err != nil {
 		log.Fatal(err)
@@ -52,38 +49,97 @@ func InstallUI(nodes *CAASPOut) {
 	if err := page.Find("#user_password_confirmation").Fill(passwd); err != nil {
 		log.Fatal(err)
 	}
+
 	if err := page.Find(".btn-block").Click(); err != nil {
 		log.Fatal(err)
 	}
+
 	go func() {
 		log.Printf("Admin user created %s %s\n", user, passwd)
 	}()
+	page.CloseWindow()
+	time.Sleep(3 * time.Second)
+}
+
+func FirstSetup(nodes *CAASPOut) {
+	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
+	t := time.Now()
+	go func() {
+		log.Println("Adding nodes to the cluster...")
+	}()
+	driver := agouti.ChromeDriver(
+		agouti.ChromeOptions("args", []string{"--no-sandbox"}), // "--disable-gpu"   "--headless"
+	)
+	if err := driver.Start(); err != nil {
+		log.Fatal(err)
+	}
+	page, err := driver.NewPage(agouti.Browser("chrome"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := page.Navigate(fmt.Sprintf("https://%v", nodes.IPAdminExt.Value)); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := page.Find("#user_email").Fill(user); err != nil {
+		log.Fatal(err)
+	}
+	if err := page.Find("#user_password").Fill(passwd); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(2 * time.Second)
+
+	//------------------Login button
+	if err := page.Find(".btn-block").Click(); err != nil {
+		log.Fatal(err)
+	}
 	page.Session().SetImplicitWait(5 * 1000)
+	time.Sleep(2 * time.Second)
 	if err := page.Find("#settings_dashboard").Fill(nodes.IPAdminInt.Value); err != nil {
-		log.Fatal(err)
-	}
-	if err := page.Find("#settings_tiller").Click(); err != nil {
-		log.Fatal(err)
-	}
-	if err := page.Find(".steps-container .pull-right").Click(); err != nil {
 		log.Fatal(err)
 	}
 	go func() {
 		log.Printf("Fill Admin internal ip: %s; selected Tiller\n", nodes.IPAdminInt.Value)
 	}()
-	if err := page.Find(".btn-primary").Click(); err != nil {
+	//------Checking the Tiller
+	if err := page.Find("#settings_tiller").Click(); err != nil {
 		log.Fatal(err)
 	}
-	time.Sleep(time.Duration(hosts) * time.Second * 20)
-	if err := page.Find(".panel-heading #accept-all").Click(); err != nil {
+	//--------Clicking Next
+	if err := page.Find(".steps-container .pull-right").Click(); err != nil {
 		log.Fatal(err)
 	}
+	time.Sleep(3 * time.Second)
+	//-------Clicking Next
+	if err := page.Find(".steps-container .btn-primary").Click(); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+
+	for true {
+		time.Sleep(10 * time.Second)
+		selection := page.All(".pending-accept-link")
+		count, _ := selection.Count()
+		if count >= Cluster.Diff {
+			break
+		}
+		go func() {
+			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
+		}()
+	}
+
+	//----------------Accept All Nodes Button---------------------------------
+	if err := page.Find(".pending-nodes-container .pull-right").Click(); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+
 	time.Sleep(time.Duration(hosts) * time.Second * 20)
 	for i := 2; i < hosts+2; i++ {
 		path := fmt.Sprintf(".minion_%d .minion-hostname", i)
 		text, err := page.Find(path).Text()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Node %s already registered or unexistent...\n", path)
 		}
 		if strings.Contains(text, "master") {
 			a := fmt.Sprintf(".minion_%d .master-btn", i)
@@ -123,7 +179,7 @@ func InstallUI(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	page.Session().SetImplicitWait(5 * 1000)
-	for {
+	for true {
 		page.Session().SetImplicitWait(30 * 1000)
 		selection := page.All(".fa-check-circle-o, .fa-times-circle")
 		count, _ := selection.Count()
@@ -133,37 +189,110 @@ func InstallUI(nodes *CAASPOut) {
 		go func() {
 			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
 		}()
+		time.Sleep(10 * time.Second)
 	}
-	selection := page.All(".fa-check-circle-o")
-	count, _ := selection.Count()
-	if count == hosts {
-		log.Printf("Bootstrap Successful, bootstrap time: %2.2f minutes\n", time.Since(t).Minutes())
-	} else {
-		log.Fatal("Bootstrap failed")
+	page.CloseWindow()
+	time.Sleep(3 * time.Second)
+}
+
+// InstallUI handles Velum interactions
+func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
+	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
+	fmt.Println(hosts)
+	go func() {
+		log.Println("Adding nodes to the cluster...")
+	}()
+	driver := agouti.ChromeDriver(
+		agouti.ChromeOptions("args", []string{"--no-sandbox"}), // "--disable-gpu"   "--headless"
+	)
+	if err := driver.Start(); err != nil {
+		log.Fatal(err)
 	}
-	page.Session().SetImplicitWait(3 * 1000)
-	err = page.All(".panel-heading #download-kubeconfig").Click()
+	page, err := driver.NewPage(agouti.Browser("chrome"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	page.Session().SetImplicitWait(5 * 1000)
-	if err := page.Find("#login").Fill(user); err != nil {
+	t := time.Now()
+	if err := page.Navigate(fmt.Sprintf("https://%v", nodes.IPAdminExt.Value)); err != nil {
 		log.Fatal(err)
 	}
-	if err := page.Find("#password").Fill(passwd); err != nil {
+
+	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
 	}
-	if err := page.Find(".theme-btn--primary").Click(); err != nil {
+	if err := page.Find("#user_password").Fill(passwd); err != nil {
 		log.Fatal(err)
 	}
-	kube, err := page.Find("a[href^=\"https\"]").Attribute("href")
-	if err != nil {
+
+	if err := page.Find(".btn-block").Click(); err != nil {
 		log.Fatal(err)
 	}
-	err = Download(kube)
-	if err != nil {
+
+	for true {
+		time.Sleep(10 * time.Second)
+		selection := page.All(".pending-accept-link")
+		count, _ := selection.Count()
+		if count >= Cluster.Diff {
+			break
+		}
+		go func() {
+			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
+		}()
+	}
+	if err := page.Find(".panel-heading #accept-all").Click(); err != nil {
 		log.Fatal(err)
 	}
+
+	time.Sleep(20 * time.Second)
+	if err := page.Find(".assign-nodes-link").Click(); err != nil {
+		log.Println(err)
+	}
+
+	time.Sleep(3 * time.Second)
+	for i := 2; i < hosts+2; i++ {
+		path := fmt.Sprintf(".minion_%d .minion-hostname", i)
+		text, err := page.Find(path).Text()
+		if err != nil {
+			log.Printf("Node %s already registered or unexistent...\n", path)
+		} else {
+			if strings.Contains(text, "master") {
+				a := fmt.Sprintf(".minion_%d .master-btn", i)
+				err = page.Find(a).Click()
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				a := fmt.Sprintf(".minion_%d .worker-btn", i)
+				err = page.Find(a).Click()
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+		time.Sleep(3 * time.Second)
+	}
+
+	time.Sleep(1 * time.Second)
+	if err := page.Find(".add-nodes-btn").Click(); err != nil {
+		log.Fatal(err)
+	}
+
+	for true {
+		page.Session().SetImplicitWait(30 * 1000)
+		selection := page.All(".fa-check-circle-o, .fa-times-circle")
+		count, _ := selection.Count()
+		if count == hosts {
+			break
+		}
+		go func() {
+			log.Printf("Bootstrapping the added node(s) %2.2f seconds now", time.Since(t).Seconds())
+		}()
+		time.Sleep(10 * time.Second)
+	}
+
+	go func() {
+		log.Printf("Roles assigned\tMasters: %v\tWorkers: %v\n", nodes.IPMastersExt, nodes.IPWorkersExt)
+	}()
 	if err := driver.Stop(); err != nil {
 		log.Fatal(err)
 	}
