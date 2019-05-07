@@ -34,11 +34,32 @@ const (
 
 			 create in the $HOME/automation directory a file named key.json containing just a string "<your key for encrypting password>"
 			 in order to put your hashed password in openstack.json, run the 1st time caasp -hash <password>
+
+			 --------------------------------------->>>IMPORTANT!<<<-----------------------------------------------------------
 			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspuiinst -createses -action apply -auth openstack.json
-			 `
+			 ------------------------------------------------------------------------------------------------------------------
+
+
+			 CHECK also the data template in utils/data.go, which sets up the parameters of your cluster in engcloud, 
+			 and looks like this:
+			 
+			var CulsterTempl = 	image_name = "SUSE-CaaS-Platform-3.0-for-OpenStack-Cloud.x86_64-3.0.0-GM.qcow2"
+							 	internal_net = "INGSOC-net"
+							 	external_net = "floating"
+								admin_size = "m1.large"
+								master_size = "m1.medium"
+								masters = {{.MastCount}}
+								worker_size = "m1.medium"
+								workers = {{.WorkCount}}
+								workers_vol_enabled = 0
+								workers_vol_size = 5
+								dnsdomain = "testing.qa.caasp.suse.net"
+								dnsentry = 0
+								stack_name = "INGSOC"`
 )
 
 var (
+	libvirt       = flag.String("tflibvirt", "", "switch for terraform-libvirt option")
 	openstack     = flag.String("auth", "openstack.json", "name of the json file containing openstack variables")
 	action        = flag.String("action", "apply", "terraform action to run, example: apply, destroy")
 	caasp         = flag.Bool("createcaasp", false, "enables/disables caasp terraform openstack setup")
@@ -47,7 +68,10 @@ var (
 	caasptfoutput = flag.Bool("caasptfoutput", false, "loads in memory caasp terraform ouput json")
 	sestfoutput   = flag.Bool("sestfoutput", false, "loads in memory ses terraform ouput json")
 	caaspUIInst   = flag.Bool("caaspuiinst", false, "Configures caasp using Velum UI")
-
+	ostkcmd       = flag.String("ostkcmd", "", "openstack command to run")
+	nodes         = flag.String("nodes", "", "what is the cluster starting configuration. How many masters/workers? w1m1 or w3m1 or m3w5")
+	append        = flag.String("addnodes", "", `how many more nodes to add, usage m2w2 -2 more masters, 2 more workers
+	Argument must be not longer than 4 symbols (e.g. workers or masters with count more than 1 digit cannot be added; like w10m1)`)
 	home = flag.String("repo", "automation", "kubic automation repo location")
 	pass = flag.String("hash", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
 )
@@ -58,20 +82,37 @@ const (
 	output   = "terraform output -json"
 )
 
+var Cluster *utils.CaaSPCluster
+
 func main() {
 	flag.Parse()
 	if *howto {
 		fmt.Fprintf(os.Stdout, "%v\n", howtouse)
 		os.Exit(0)
 	}
+
+	os.Chdir(*home)
+	if *ostkcmd != "" {
+		out1, out2 := utils.OpenstackCmd(caaspDir, *openstack)
+		fmt.Printf("%s\n  %s\n", out1, out2)
+	}
+	os.Chdir(*home)
 	if *pass != "password" {
 		utils.Hashinator(*pass, *home, caaspDir)
-		//fmt.Println(utils.Dehashinator(*home, caaspDir))
-		env, _ := utils.SetOSEnv("/home/atighineanu/work/CaaSP_kube/automation/caasp-openstack-terraform/openstack.json")
-		fmt.Println(env)
+		utils.Hashinator(*pass, *home, sesDir)
 	}
 	os.Chdir(*home)
 	if *caasp {
+		out, _ := utils.CmdRun(caaspDir, *openstack, output)
+		a := utils.CAASPOut{}
+		err := json.Unmarshal([]byte(out), &a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if *nodes == "" {
+			*nodes = "m1w2"
+		}
+		Cluster = utils.NodesAdder(caaspDir, *nodes, &a, true)
 		utils.TfInit(caaspDir)
 		utils.CmdRun(caaspDir, *openstack, fmt.Sprintf(command, *action))
 	}
@@ -85,7 +126,22 @@ func main() {
 		}
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
-		utils.InstallUI(&a)
+		utils.CreateAcc(&a)
+		utils.FirstSetup(&a)
+	}
+	os.Chdir(*home)
+	if *append != "" {
+		out, _ := utils.CmdRun(caaspDir, *openstack, output)
+		a := utils.CAASPOut{}
+		err := json.Unmarshal([]byte(out), &a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
+		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
+		Cluster := utils.NodesAdder(caaspDir, *append, &a, false)
+		utils.CmdRun(caaspDir, *openstack, fmt.Sprintf(command, *action))
+		utils.InstallUI(&a, Cluster)
 	}
 	os.Chdir(*home)
 	if *ses {
@@ -106,6 +162,6 @@ func main() {
 		}
 		s := a.K8SSC.Value
 		fmt.Println(a.IPAdminExt.Value, a.IPAdminInt.Value, a.IPMonsExt.Value, a.IPMonsExt.Value, a.IPOsdsInt.Value, "\n", a.K8SCS.Value, "\n", fmt.Sprintf("%s", s[0]))
-
 	}
+
 }
