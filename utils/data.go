@@ -42,3 +42,32 @@ type Admin struct {
 type Machines struct {
 	Value []string
 }
+
+type CaaSPCluster struct {
+	ImageName string
+	IntNet    string
+	ExtNet    string
+	AdmSize   string
+	MastSize  string
+	MastCount int
+	WorkSize  string
+	WorkCount int
+	DnsDomain string
+	DnsEntry  int
+	StackName string
+	Diff      int //----it is to indicate how many more new nodes you add when appending new nodes to the cluster
+}
+
+var CulsterTempl = `image_name = "SUSE-CaaS-Platform-3.0-for-OpenStack-Cloud.x86_64-3.0.0-GM.qcow2"
+internal_net = "INGSOC-net"
+external_net = "floating"
+admin_size = "m1.large"
+master_size = "m1.medium"
+masters = {{.MastCount}}
+worker_size = "m1.medium"
+workers = {{.WorkCount}}
+workers_vol_enabled = 0
+workers_vol_size = 5
+dnsdomain = "testing.qa.caasp.suse.net"
+dnsentry = 0
+stack_name = "INGSOC"`
