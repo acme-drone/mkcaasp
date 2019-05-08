@@ -37,9 +37,12 @@ func CreateAcc(nodes *CAASPOut) {
 	}
 	page.Session().SetImplicitWait(3000)
 
+	//---------------Visiting directly the "signup" page of velum to create a user
 	if err := page.Navigate(fmt.Sprintf("https://%v.%s/users/sign_up", nodes.IPAdminExt.Value, domain)); err != nil {
 		log.Fatal(err)
 	}
+
+	//---------------Filling in user data
 	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
 	}
@@ -80,7 +83,7 @@ func FirstSetup(nodes *CAASPOut) {
 	if err := page.Navigate(fmt.Sprintf("https://%v", nodes.IPAdminExt.Value)); err != nil {
 		log.Fatal(err)
 	}
-
+	//---------------Logging in
 	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
 	}
@@ -95,6 +98,7 @@ func FirstSetup(nodes *CAASPOut) {
 	}
 	page.Session().SetImplicitWait(5 * 1000)
 	time.Sleep(2 * time.Second)
+	//------------Filling in the Admin IP on the dashboard
 	if err := page.Find("#settings_dashboard").Fill(nodes.IPAdminInt.Value); err != nil {
 		log.Fatal(err)
 	}
@@ -116,7 +120,8 @@ func FirstSetup(nodes *CAASPOut) {
 	}
 	time.Sleep(3 * time.Second)
 
-	for true {
+	//--------------counting so all newly added nodes will be pending to be accepted
+	for {
 		time.Sleep(10 * time.Second)
 		selection := page.All(".pending-accept-link")
 		count, _ := selection.Count()
@@ -135,6 +140,8 @@ func FirstSetup(nodes *CAASPOut) {
 	time.Sleep(3 * time.Second)
 
 	time.Sleep(time.Duration(hosts) * time.Second * 20)
+
+	//------distributing roles to nodes based on their names
 	for i := 2; i < hosts+2; i++ {
 		path := fmt.Sprintf(".minion_%d .minion-hostname", i)
 		text, err := page.Find(path).Text()
@@ -179,7 +186,8 @@ func FirstSetup(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	page.Session().SetImplicitWait(5 * 1000)
-	for true {
+	//-------Waiting for all nodes to have a green check status "ready"
+	for {
 		page.Session().SetImplicitWait(30 * 1000)
 		selection := page.All(".fa-check-circle-o, .fa-times-circle")
 		count, _ := selection.Count()
@@ -217,6 +225,7 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 		log.Fatal(err)
 	}
 
+	//--------------------Logging in
 	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
 	}
@@ -228,7 +237,8 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 		log.Fatal(err)
 	}
 
-	for true {
+	//-------------Counting the number of pending nodes (boot+autoyast might take a while) to accept
+	for {
 		time.Sleep(10 * time.Second)
 		selection := page.All(".pending-accept-link")
 		count, _ := selection.Count()
@@ -249,6 +259,8 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 	}
 
 	time.Sleep(3 * time.Second)
+
+	//-----------Adding minions based on their name (master, if not -> worker)
 	for i := 2; i < hosts+2; i++ {
 		path := fmt.Sprintf(".minion_%d .minion-hostname", i)
 		text, err := page.Find(path).Text()
@@ -277,7 +289,8 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 		log.Fatal(err)
 	}
 
-	for true {
+	//-------waiting for all nodes to have a green checkmark "ready" (e.g. to be bootstrapped)
+	for {
 		page.Session().SetImplicitWait(30 * 1000)
 		selection := page.All(".fa-check-circle-o, .fa-times-circle")
 		count, _ := selection.Count()
