@@ -200,20 +200,24 @@ func OpenstackCmd(dir string, openstackAPIauth string) (string, string) {
 	for i := 0; i < len(os.Args); i++ {
 		if os.Args[i] == "-ostkcmd" {
 			a = i + 1
-		} else {
-			if !hashtable[os.Args[i]] {
-				b = i
+			for j := i; j < len(os.Args); j++ {
+				if !hashtable[os.Args[j]] {
+					b = j
+				} else {
+					break
+				}
 			}
 		}
 	}
 
+	//fmt.Printf("%v...%v", a, b)
+	//time.Sleep(10 * time.Second)
 	wd, _ := os.Getwd()
 	os.Chdir(filepath.Join(wd, dir))
 	env, err := SetOSEnv(openstackAPIauth)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(os.Args[a : b+1])
 	newEnv := append(os.Environ(), env...)
 	cmd := exec.Command("openstack", os.Args[a:b+1]...)
 	cmd.Env = newEnv
