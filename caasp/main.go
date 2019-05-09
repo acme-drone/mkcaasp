@@ -70,10 +70,18 @@ var (
 	caaspUIInst   = flag.Bool("caaspuiinst", false, "Configures caasp using Velum UI")
 	ostkcmd       = flag.String("ostkcmd", "", "openstack command to run")
 	nodes         = flag.String("nodes", "", "what is the cluster starting configuration. How many masters/workers? w1m1 or w3m1 or m3w5")
-	append        = flag.String("addnodes", "", `how many more nodes to add, usage m2w2 -2 more masters, 2 more workers
+	addnodes      = flag.String("addnodes", "", `how many more nodes to add, usage m2w2 -2 more masters, 2 more workers
 	Argument must be not longer than 4 symbols (e.g. workers or masters with count more than 1 digit cannot be added; like w10m1)`)
-	home = flag.String("repo", "automation", "kubic automation repo location")
-	pass = flag.String("hash", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
+	home     = flag.String("repo", "automation", "kubic automation repo location")
+	pass     = flag.String("pass", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
+	hash     = flag.String("key", "default", "chose which string is going to be your hash key")
+	cmd      = flag.String("cmd", "", "the orchestration command to run from admin using salt-master container")
+	refresh  = flag.Bool("ref", false, "refreshing the salt grains from admin")
+	disable  = flag.Bool("dis", false, "disabling transactional-update from admin")
+	register = flag.Bool("reg", false, "registering the cluster to SCC")
+	addrepo  = flag.String("ar", "", "adding a repository (based on an URL) to the cluster")
+	sysupd   = flag.Bool("sysupd", false, "triggers transactional-update cleanup dup salt")
+	packupd  = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
 )
 
 const (
@@ -90,16 +98,15 @@ func main() {
 		fmt.Fprintf(os.Stdout, "%v\n", howtouse)
 		os.Exit(0)
 	}
-
 	os.Chdir(*home)
 	if *ostkcmd != "" {
-		out1, out2 := utils.OpenstackCmd(caaspDir, *openstack)
+		out1, out2 := utils.CmdRun(caaspDir, *openstack, *ostkcmd)
 		fmt.Printf("%s\n  %s\n", out1, out2)
 	}
 	os.Chdir(*home)
 	if *pass != "password" {
-		utils.Hashinator(*pass, *home, caaspDir)
-		utils.Hashinator(*pass, *home, sesDir)
+		utils.Hashinator(*pass, *hash, *home, caaspDir)
+		utils.Hashinator(*pass, *hash, *home, sesDir)
 	}
 	os.Chdir(*home)
 	if *caasp {
@@ -130,7 +137,7 @@ func main() {
 		utils.FirstSetup(&a)
 	}
 	os.Chdir(*home)
-	if *append != "" {
+	if *addnodes != "" {
 		out, _ := utils.CmdRun(caaspDir, *openstack, output)
 		a := utils.CAASPOut{}
 		err := json.Unmarshal([]byte(out), &a)
@@ -139,7 +146,7 @@ func main() {
 		}
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
-		Cluster := utils.NodesAdder(caaspDir, *append, &a, false)
+		Cluster := utils.NodesAdder(caaspDir, *addnodes, &a, false)
 		utils.CmdRun(caaspDir, *openstack, fmt.Sprintf(command, *action))
 		utils.InstallUI(&a, Cluster)
 	}
@@ -163,5 +170,35 @@ func main() {
 		s := a.K8SSC.Value
 		fmt.Println(a.IPAdminExt.Value, a.IPAdminInt.Value, a.IPMonsExt.Value, a.IPMonsExt.Value, a.IPOsdsInt.Value, "\n", a.K8SCS.Value, "\n", fmt.Sprintf("%s", s[0]))
 	}
-
+	//----------------------Cluster - Related - Commands (orchestration)
+	os.Chdir(*home)
+	if *refresh {
+		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "refresh", "")
+		fmt.Printf("%s\n%s\n", out, err)
+	}
+	os.Chdir(*home)
+	if *cmd != "" {
+		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "command", *cmd)
+		fmt.Printf("%s\n%s\n", out, err)
+	}
+	os.Chdir(*home)
+	if *disable {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "disable", "")
+	}
+	os.Chdir(*home)
+	if *register {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", "")
+	}
+	os.Chdir(*home)
+	if *addrepo != "" {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "addrepo", *addrepo)
+	}
+	os.Chdir(*home)
+	if *sysupd {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "update", "")
+	}
+	os.Chdir(*home)
+	if *packupd != "" {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "packupdate", *packupd)
+	}
 }
