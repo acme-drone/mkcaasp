@@ -187,7 +187,7 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *register {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", "")
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
 	}
 	os.Chdir(*home)
 	if *addrepo != "" {
