@@ -103,8 +103,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
 	if option == "register" {
-		regcode := "" // <<-----------put your SCC regcode here!!!
-		cmdtorun := "'transactional-update register -r " + regcode + "'"
+		cmdtorun := "'transactional-update register -r " + command + "'"
 		cmd := append(alias, []string{"cmd.run", cmdtorun}...)
 		out, err := s.SSHCommand(cmd...).CombinedOutput()
 		if err != nil {
