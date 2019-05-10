@@ -82,7 +82,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		cmd := append(alias, "saltutil.refresh_grains")
 		out, err := s.SSHCommand(cmd...).CombinedOutput()
 		if err != nil {
-			log.Printf("ssh command didn't run as expected: %s\n", err)
+			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
@@ -90,7 +90,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		cmd := append(alias, "cmd.run", "'"+command+"'")
 		out, err := s.SSHCommand(cmd...).CombinedOutput()
 		if err != nil {
-			log.Printf("ssh command didn't run as expected: %s\n", err)
+			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
@@ -98,7 +98,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		cmd := append(alias, []string{"cmd.run", "'systemctl disable --now transactional-update.timer'"}...)
 		out, err := s.SSHCommand(cmd...).CombinedOutput()
 		if err != nil {
-			log.Printf("ssh command didn't run as expected: %s\n", err)
+			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
@@ -107,16 +107,17 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		cmd := append(alias, []string{"cmd.run", cmdtorun}...)
 		out, err := s.SSHCommand(cmd...).CombinedOutput()
 		if err != nil {
-			log.Printf("ssh command didn't run as expected: %s\n", err)
+			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
 	if option == "addrepo" {
-		cmdtorun := append(alias, []string{"'zypper", "ar", command}...)
+		cmdtorun := append(alias, "cmd.run 'zypper ar "+command+"'")
 		out, err := s.SSHCommand(cmdtorun...).CombinedOutput()
 		if err != nil {
-			log.Printf("ssh command didn't run as expected: %s\n", err)
+			fmt.Fprintf(os.Stdout, "AdmOrchCmd -> addrepo: ssh command didn't run as expected: %s\n", err)
 		}
+		fmt.Printf(fmt.Sprintf("%s", string(out)))
 		return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 	}
 	if option == "update" || option == "packupdate" {
@@ -174,7 +175,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		return stdoutBuf.String(), stderrBuf.String()
 	}
 	if option == "new" {
-		AdminOrchCmd(s, "register", "")
+		AdminOrchCmd(s, "register", command)
 		AdminOrchCmd(s, "disable", "")
 		AdminOrchCmd(s, "update", "")
 		AdminOrchCmd(s, "refresh", "")
