@@ -20,6 +20,94 @@ const (
 	passwd = "123456789"
 )
 
+func VelumUpdater(nodes *CAASPOut) {
+	t := time.Now()
+	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
+	driver := agouti.ChromeDriver(
+		agouti.ChromeOptions("args", []string{"--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
+	)
+	if err := driver.Start(); err != nil {
+		log.Fatal(err)
+	}
+	page, err := driver.NewPage(agouti.Browser("chrome"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	page.Session().SetImplicitWait(3000)
+	//---------------Visiting directly the "signup" page of velum to create a user
+	if err := page.Navigate(fmt.Sprintf("https://%v.%s/users/sign_up", nodes.IPAdminExt.Value, domain)); err != nil {
+		log.Fatal(err)
+	}
+
+	//---------------Logging in
+	time.Sleep(2 * time.Second)
+	if err := page.Find("#user_email").Fill(user); err != nil {
+		log.Fatal(err)
+	}
+	if err := page.Find("#user_password").Fill(passwd); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(2 * time.Second)
+
+	//------------------Login button
+	if err := page.Find(".btn-block").Click(); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(4 * time.Second)
+
+	//-----------------UPDATE ADMIN NODE
+	if err := page.Find(".update-admin-btn").Click(); err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(2 * time.Second)
+	//---------------Reboot to update
+	if err := page.Find(".reboot-update-btn").Click(); err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		out, er := AdminOrchCmd(nodes, "refresh", "")
+		if !strings.Contains(er, "nil") {
+			fmt.Printf("%s\n%s\n", out, er)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
+		time.Sleep(2 * time.Second)
+		if err := page.Find(".reboot-update-btn"); err != nil {
+			if err := page.Find(".update-all-nodes").Click(); err == nil {
+				break
+			}
+		}
+		time.Sleep(5 * time.Second)
+		go func() {
+			log.Printf("Updating Admin for %2.2f seconds now...", time.Since(t).Seconds())
+		}()
+	}
+
+	for {
+		page.Session().SetImplicitWait(30 * 1000)
+		selection := page.All(".fa-check-circle-o, .fa-times-circle")
+		count, _ := selection.Count()
+		if count >= hosts {
+			break
+		} else {
+			selection := page.All(".fa-arrow-circle-up")
+			count, _ := selection.Count()
+			if count > 0 {
+				err = page.Find("#retry-cluster-upgrade").Click()
+				if err != nil {
+					fmt.Fprintf(os.Stdout, "Cannot find Retry Cluster Update Button:%s\n", err)
+				}
+			}
+		}
+		go func() {
+			log.Printf("Updating cluster for %2.2f seconds now", time.Since(t).Seconds())
+		}()
+		time.Sleep(20 * time.Second)
+	}
+	page.CloseWindow()
+}
+
 func CreateAcc(nodes *CAASPOut) {
 	go func() {
 		log.Println("Bootstrapping the cluster")
@@ -36,12 +124,10 @@ func CreateAcc(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	page.Session().SetImplicitWait(3000)
-
 	//---------------Visiting directly the "signup" page of velum to create a user
 	if err := page.Navigate(fmt.Sprintf("https://%v.%s/users/sign_up", nodes.IPAdminExt.Value, domain)); err != nil {
 		log.Fatal(err)
 	}
-
 	//---------------Filling in user data
 	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
@@ -52,11 +138,9 @@ func CreateAcc(nodes *CAASPOut) {
 	if err := page.Find("#user_password_confirmation").Fill(passwd); err != nil {
 		log.Fatal(err)
 	}
-
 	if err := page.Find(".btn-block").Click(); err != nil {
 		log.Fatal(err)
 	}
-
 	go func() {
 		log.Printf("Admin user created %s %s\n", user, passwd)
 	}()
@@ -131,6 +215,19 @@ func FirstSetup(nodes *CAASPOut) {
 		go func() {
 			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
 		}()
+		for {
+			page.Session().SetImplicitWait(30 * 1000)
+			selection := page.All(".fa-check-circle-o, .fa-times-circle")
+			count, _ := selection.Count()
+			if count == hosts {
+				break
+			}
+			go func() {
+				log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
+			}()
+			time.Sleep(10 * time.Second)
+		}
+		page.CloseWindow()
 	}
 
 	//----------------Accept All Nodes Button---------------------------------
