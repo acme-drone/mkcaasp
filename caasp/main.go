@@ -7,6 +7,7 @@ import (
 	"log"
 	"mkcaasp/utils"
 	"os"
+	"strings"
 )
 
 const (
@@ -82,6 +83,8 @@ var (
 	addrepo  = flag.String("ar", "", "adding a repository (based on an URL) to the cluster")
 	sysupd   = flag.Bool("sysupd", false, "triggers transactional-update cleanup dup salt")
 	packupd  = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
+	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
+	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
 )
 
 const (
@@ -174,12 +177,20 @@ func main() {
 	os.Chdir(*home)
 	if *refresh {
 		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "refresh", "")
-		fmt.Printf("%s\n%s\n", out, err)
+		if !strings.Contains(err, "nil") {
+			fmt.Printf("%s\n%s\n", out, err)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
 	}
 	os.Chdir(*home)
 	if *cmd != "" {
 		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "command", *cmd)
-		fmt.Printf("%s\n%s\n", out, err)
+		if !strings.Contains(err, "nil") {
+			fmt.Printf("%s\n%s\n", out, err)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
 	}
 	os.Chdir(*home)
 	if *disable {
@@ -200,5 +211,16 @@ func main() {
 	os.Chdir(*home)
 	if *packupd != "" {
 		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "packupdate", *packupd)
+	}
+	os.Chdir(*home)
+	if *new {
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode)
+	}
+	os.Chdir(*home)
+	if *uiupd {
+		a := utils.CAASPOutReturner(*openstack, *home, caaspDir)
+		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
+		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
+		utils.VelumUpdater(a)
 	}
 }
