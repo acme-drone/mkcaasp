@@ -151,6 +151,11 @@ func main() {
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
 		Cluster := utils.NodesAdder(caaspDir, *addnodes, &a, false)
 		utils.CmdRun(caaspDir, *openstack, fmt.Sprintf(command, *action))
+		a = utils.CAASPOut{}
+		err = json.Unmarshal([]byte(out), &a)
+		if err != nil {
+			log.Fatal(err)
+		}
 		utils.InstallUI(&a, Cluster)
 	}
 	os.Chdir(*home)
