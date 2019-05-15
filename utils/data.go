@@ -9,7 +9,7 @@ type OSAPI struct {
 	IdentityAPIVersion string
 	Interface          string
 	Username           string
-	Password           []byte
+	Password           string       //[]byte
 	ProjectID          string
 }
 
@@ -71,3 +71,5 @@ workers_vol_size = 5
 dnsdomain = "testing.qa.caasp.suse.net"
 dnsentry = 0
 stack_name = "INGSOC"`
+
+var 
