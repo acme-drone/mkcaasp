@@ -36,7 +36,7 @@ func SetOSEnv(file string) (EnvOS, error) {
 		"OS_IDENTITY_API_VERSION=" + auth.IdentityAPIVersion,
 		"OS_INTERFACE=" + auth.Interface,
 		"OS_USERNAME=" + auth.Username,
-		"OS_PASSWORD=" + Dehashinator("./../", "./"), //Dehashinator("./../", "./"),  auth.Password
+		"OS_PASSWORD=" + auth.Password, //Dehashinator("./../", "./"),
 		"OS_PROJECT_ID=" + auth.ProjectID,
 	}
 	ENV = env
@@ -125,7 +125,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 		var stdoutBuf, stderrBuf bytes.Buffer
 		//----------system update and updating a development package have slightly different workflow
 		if option == "update" {
-			cmdtorun := append(alias, []string{"cmd.run", "'transactional-update cleanup dup salt'"}...)
+			cmdtorun := append(alias, []string{"cmd.run", "'transactional-update cleanup dup reboot'"}...)
 			cmd = s.SSHCommand(cmdtorun...)
 		} else {
 			//-------if package -> first setting transact-up.conf to allow automatic -y accept development packages
@@ -184,37 +184,46 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 }
 
 func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *CaaSPCluster {
+	var err error
 	temp := strings.Split(append, "")
 	if len(temp) > 4 {
-		log.Fatalf("Check your syntaxis...there must be just four symbols in -addnodes argument")
+		log.Fatalf("Check your syntaxis...there must be just four symbols in -addnodes argument\n(Negative or double digit values not supported...)")
 	} else {
 		//-------------------PARSING the argument of -addnodes or -nodes
 		for i := 0; i < len(temp); i++ {
 			if temp[i] == "w" {
 				if len(temp) >= i+2 {
-					Cluster.WorkCount, _ = strconv.Atoi(temp[i+1])
+					Cluster.WorkCount, err = strconv.Atoi(temp[i+1])
+					if err != nil {
+						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.WorkCount: error while strconv.\n%s", err)
+					}
 					fmt.Printf("Adding %v workers.\n", Cluster.WorkCount)
 				}
 			}
 			if temp[i] == "m" {
 				if len(temp) >= i+2 {
-					Cluster.MastCount, _ = strconv.Atoi(temp[i+1])
+					Cluster.MastCount, err = strconv.Atoi(temp[i+1])
+					if err != nil {
+						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.MastCount: error while strconv.\n%s", err)
+					}
 					fmt.Printf("Adding %v masters.\n", Cluster.MastCount)
 				}
 			}
 		}
 	}
 
-	//------------
+	//------------Calculating the value Cluster.Diff (delta of nodes compared to actual cluster state),
+	//            on which logic of velum.Uiinst function is working...
 	if Firsttime == true {
-		Cluster.Diff = len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
-		if Cluster.Diff == 0 {
-			if Cluster.MastCount == 0 {
-				Cluster.MastCount += 1
-			}
-			if Cluster.WorkCount == 0 {
-				Cluster.WorkCount += 2
-			}
+		if Cluster.MastCount == 0 {
+			Cluster.MastCount += 1
+		}
+		if Cluster.WorkCount == 0 {
+			Cluster.WorkCount += 2
+		}
+		Cluster.Diff = Cluster.MastCount + Cluster.WorkCount - len(nodes.IPMastersExt.Value) - len(nodes.IPWorkersExt.Value)
+		if Cluster.Diff < 0 {
+			log.Printf("Removing nodes from cluster isn't covered neither tested... you're on your own risk now!")
 		}
 	} else {
 		if Cluster.MastCount >= 0 || Cluster.WorkCount >= 0 {
@@ -223,6 +232,8 @@ func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *Caa
 			Cluster.WorkCount += len(nodes.IPWorkersExt.Value)
 		}
 	}
+
+	//---------------Adding the new nodes to the cluster.tf file....
 	templ, err := template.New("AddingNodes").Parse(CulsterTempl)
 	if err != nil {
 		log.Fatalf("Error parsin ClusterTempl constant...%s", err)
