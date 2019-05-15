@@ -74,7 +74,7 @@ func VelumUpdater(nodes *CAASPOut) {
 		}
 		time.Sleep(2 * time.Second)
 		if err := page.Find(".reboot-update-btn"); err != nil {
-			if err := page.Find(".update-all-nodes").Click(); err == nil {
+			if err := page.Find("#update-all-nodes").Click(); err == nil {
 				break
 			}
 		}
@@ -114,7 +114,7 @@ func CreateAcc(nodes *CAASPOut) {
 	}()
 	//driver := agouti.ChromeDriver()
 	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{"--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
+		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
 	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
@@ -129,6 +129,7 @@ func CreateAcc(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	//---------------Filling in user data
+	time.Sleep(10 * time.Second)
 	if err := page.Find("#user_email").Fill(user); err != nil {
 		log.Fatal(err)
 	}
@@ -155,7 +156,7 @@ func FirstSetup(nodes *CAASPOut) {
 		log.Println("Adding nodes to the cluster...")
 	}()
 	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{"--no-sandbox"}), // "--disable-gpu"   "--headless"
+		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}), // "--disable-gpu"   "--headless"
 	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
@@ -181,7 +182,7 @@ func FirstSetup(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	page.Session().SetImplicitWait(5 * 1000)
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	//------------Filling in the Admin IP on the dashboard
 	if err := page.Find("#settings_dashboard").Fill(nodes.IPAdminInt.Value); err != nil {
 		log.Fatal(err)
@@ -205,29 +206,24 @@ func FirstSetup(nodes *CAASPOut) {
 	time.Sleep(3 * time.Second)
 
 	//--------------counting so all newly added nodes will be pending to be accepted
+	itercounter := 0
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(20 * time.Second)
+		if itercounter >= 10 {
+			break
+			log.Printf("Not all nodes are visible to the admin. Something is wrong with the cluster/cluster.tf...")
+		}
 		selection := page.All(".pending-accept-link")
 		count, _ := selection.Count()
 		if count >= Cluster.Diff {
 			break
 		}
 		go func() {
-			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
+			log.Printf("Waiting for new nodes to be accepted for %2.2f seconds now", time.Since(t).Seconds())
 		}()
-		for {
-			page.Session().SetImplicitWait(30 * 1000)
-			selection := page.All(".fa-check-circle-o, .fa-times-circle")
-			count, _ := selection.Count()
-			if count == hosts {
-				break
-			}
-			go func() {
-				log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
-			}()
-			time.Sleep(10 * time.Second)
-		}
-		page.CloseWindow()
+		log.Printf("All new nodes accepted at %2.2f seconds!", time.Since(t).Seconds())
+		itercounter++
+		time.Sleep(2 * time.Second)
 	}
 
 	//----------------Accept All Nodes Button---------------------------------
@@ -249,13 +245,13 @@ func FirstSetup(nodes *CAASPOut) {
 			a := fmt.Sprintf(".minion_%d .master-btn", i)
 			err = page.Find(a).Click()
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("the minion %d couldn't be found:%s\n", i, err)
 			}
 		} else {
 			a := fmt.Sprintf(".minion_%d .worker-btn", i)
 			err = page.Find(a).Click()
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("the minion %d couldn't be found:%s\n", i, err)
 			}
 		}
 	}
@@ -288,7 +284,8 @@ func FirstSetup(nodes *CAASPOut) {
 		page.Session().SetImplicitWait(30 * 1000)
 		selection := page.All(".fa-check-circle-o, .fa-times-circle")
 		count, _ := selection.Count()
-		if count == hosts {
+		if count >= hosts {
+			log.Printf("The Cluster is properly set up.")
 			break
 		}
 		go func() {
@@ -302,8 +299,6 @@ func FirstSetup(nodes *CAASPOut) {
 
 // InstallUI handles Velum interactions
 func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
-	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
-	fmt.Println(hosts)
 	go func() {
 		log.Println("Adding nodes to the cluster...")
 	}()
@@ -318,6 +313,7 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 		log.Fatal(err)
 	}
 	t := time.Now()
+	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value) + Cluster.Diff
 	if err := page.Navigate(fmt.Sprintf("https://%v", nodes.IPAdminExt.Value)); err != nil {
 		log.Fatal(err)
 	}
@@ -343,21 +339,27 @@ func InstallUI(nodes *CAASPOut, Cluster *CaaSPCluster) {
 			break
 		}
 		go func() {
-			log.Printf("Bootstrapping cluster for %2.2f seconds now", time.Since(t).Seconds())
+			log.Printf("Bootstrapping new nodes to the cluster for %2.2f seconds now", time.Since(t).Seconds())
 		}()
 	}
 	if err := page.Find(".panel-heading #accept-all").Click(); err != nil {
 		log.Fatal(err)
 	}
 
-	time.Sleep(20 * time.Second)
-	if err := page.Find(".assign-nodes-link").Click(); err != nil {
-		log.Println(err)
-	}
+	time.Sleep(60 * time.Second)
 
+	for {
+		if err := page.Find(".assign-nodes-link").Click(); err != nil {
+			log.Println(err)
+		} else {
+			break
+		}
+		log.Printf("Bootstrapping new nodes to the cluster for %2.2f seconds now", time.Since(t).Seconds())
+	}
 	time.Sleep(3 * time.Second)
 
 	//-----------Adding minions based on their name (master, if not -> worker)
+	fmt.Println(hosts)
 	for i := 2; i < hosts+2; i++ {
 		path := fmt.Sprintf(".minion_%d .minion-hostname", i)
 		text, err := page.Find(path).Text()
