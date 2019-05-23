@@ -114,7 +114,7 @@ func CreateAcc(nodes *CAASPOut) {
 	}()
 	//driver := agouti.ChromeDriver()
 	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
+	//agouti.ChromeOptions("args", []string{"--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
 	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
@@ -131,6 +131,7 @@ func CreateAcc(nodes *CAASPOut) {
 	//---------------Filling in user data
 	time.Sleep(10 * time.Second)
 	if err := page.Find("#user_email").Fill(user); err != nil {
+		fmt.Fprintf(os.Stdout, "Createacc->Fill error: %s\n", err)
 		log.Fatal(err)
 	}
 	if err := page.Find("#user_password").Fill(passwd); err != nil {
@@ -264,6 +265,7 @@ func FirstSetup(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 	page.Session().SetImplicitWait(3 * 1000)
+	time.Sleep(5 * time.Second)
 	apiserver := fmt.Sprintf("%s.%s", nodes.IPMastersExt.Value[0], domain)
 	err = page.Find("#settings_apiserver").Fill(apiserver)
 	if err != nil {

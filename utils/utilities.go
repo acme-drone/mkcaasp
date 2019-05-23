@@ -36,7 +36,7 @@ func SetOSEnv(file string) (EnvOS, error) {
 		"OS_IDENTITY_API_VERSION=" + auth.IdentityAPIVersion,
 		"OS_INTERFACE=" + auth.Interface,
 		"OS_USERNAME=" + auth.Username,
-		"OS_PASSWORD=" + auth.Password, //Dehashinator("./../", "./"),
+		"OS_PASSWORD=" + auth.Password, //Dehashinator("./../", "./"),    auth.Password,
 		"OS_PROJECT_ID=" + auth.ProjectID,
 	}
 	ENV = env

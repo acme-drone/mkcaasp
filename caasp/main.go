@@ -56,7 +56,10 @@ const (
 								workers_vol_size = 5
 								dnsdomain = "testing.qa.caasp.suse.net"
 								dnsentry = 0
-								stack_name = "INGSOC"`
+								stack_name = "INGSOC"
+				
+			Last but not least: make sure you put your SCC-key whether in a variable in package utils which isn't part of the project
+			(like key.go), or hardcoded... in main.go. But we aware: with 1st commit your key will be visible on github.`
 )
 
 var (
@@ -73,9 +76,9 @@ var (
 	nodes         = flag.String("nodes", "", "what is the cluster starting configuration. How many masters/workers? w1m1 or w3m1 or m3w5")
 	addnodes      = flag.String("addnodes", "", `how many more nodes to add, usage m2w2 -2 more masters, 2 more workers
 	Argument must be not longer than 4 symbols (e.g. workers or masters with count more than 1 digit cannot be added; like w10m1)`)
-	home     = flag.String("repo", "automation", "kubic automation repo location")
-	pass     = flag.String("pass", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
-	hash     = flag.String("key", "default", "chose which string is going to be your hash key")
+	home = flag.String("repo", "automation", "kubic automation repo location")
+	//pass     = flag.String("pass", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
+	//hash     = flag.String("key", "default", "chose which string is going to be your hash key")
 	cmd      = flag.String("cmd", "", "the orchestration command to run from admin using salt-master container")
 	refresh  = flag.Bool("ref", false, "refreshing the salt grains from admin")
 	disable  = flag.Bool("dis", false, "disabling transactional-update from admin")
@@ -107,10 +110,10 @@ func main() {
 		fmt.Printf("%s\n  %s\n", out1, out2)
 	}
 	os.Chdir(*home)
-	if *pass != "password" {
+	/*	if *pass != "password" {
 		utils.Hashinator(*pass, *hash, *home, caaspDir)
 		utils.Hashinator(*pass, *hash, *home, sesDir)
-	}
+	} */
 	os.Chdir(*home)
 	if *caasp {
 		out, _ := utils.CmdRun(caaspDir, *openstack, output)
@@ -219,7 +222,7 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *new {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode)
+		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
 	}
 	os.Chdir(*home)
 	if *uiupd {
