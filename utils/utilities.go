@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var Cluster CaaSPCluster
@@ -176,8 +177,11 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "new" {
 		AdminOrchCmd(s, "register", command)
+		time.Sleep(10 * time.Second)
 		AdminOrchCmd(s, "disable", "")
+		time.Sleep(10 * time.Second)
 		AdminOrchCmd(s, "update", "")
+		time.Sleep(20 * time.Second)
 		AdminOrchCmd(s, "refresh", "")
 	}
 	return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
