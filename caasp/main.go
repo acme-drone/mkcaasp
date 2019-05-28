@@ -33,9 +33,6 @@ const (
 				"ProjectID":"00000000000000000000000000"
 			 }
 
-			 create in the $HOME/automation directory a file named key.json containing just a string "<your key for encrypting password>"
-			 in order to put your hashed password in openstack.json, run the 1st time caasp -hash <password>
-
 			 --------------------------------------->>>IMPORTANT!<<<-----------------------------------------------------------
 			 run the utility: caasp -repo $HOME/automation -createcaasp -caaspuiinst -createses -action apply -auth openstack.json
 			 ------------------------------------------------------------------------------------------------------------------
@@ -202,7 +199,12 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *disable {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "disable", "")
+		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "disable", "")
+		if !strings.Contains(err, "nil") {
+			fmt.Printf("%s\n%s\n", out, err)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
 	}
 	os.Chdir(*home)
 	if *register {
