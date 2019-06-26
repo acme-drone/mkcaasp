@@ -65,24 +65,38 @@ func VelumUpdater(nodes *CAASPOut) {
 		log.Fatal(err)
 	}
 
+	log.Printf("Updating Admin for %2.2f seconds now...", time.Since(t).Seconds())
+	time.Sleep(100 * time.Second)
+	velumURL := fmt.Sprintf("https://%s.nip.io", nodes.IPAdminExt.Value)
+	log.Printf("Velum warm up time: %2.2f Seconds\n", CheckVelumUp(velumURL))
+
 	for {
+		time.Sleep(10 * time.Second)
 		out, er := AdminOrchCmd(nodes, "refresh", "")
 		if !strings.Contains(er, "nil") {
 			fmt.Printf("%s\n%s\n", out, er)
 		} else {
 			fmt.Printf("%s\n", out)
 		}
-		time.Sleep(2 * time.Second)
+
+		time.Sleep(time.Duration(10*hosts) * time.Second)
 		if err := page.Find(".reboot-update-btn"); err != nil {
 			if err := page.Find("#update-all-nodes").Click(); err == nil {
 				break
 			}
 		}
+
 		time.Sleep(5 * time.Second)
 		go func() {
 			log.Printf("Updating Admin for %2.2f seconds now...", time.Since(t).Seconds())
 		}()
 	}
+
+	/*	err = page.Navigate(fmt.Sprintf("https://%v.%s/update", nodes.IPAdminExt.Value, domain)) //https://10.86.4.11.nip.io/update
+		if err != nil {
+			log.Fatalf("Error at clicking update the rest nodes:  %s", err)
+		}
+	*/
 
 	for {
 		page.Session().SetImplicitWait(30 * 1000)
@@ -114,7 +128,7 @@ func CreateAcc(nodes *CAASPOut) {
 	}()
 	//driver := agouti.ChromeDriver()
 	driver := agouti.ChromeDriver(
-	//agouti.ChromeOptions("args", []string{"--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
+		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}), //[]string{"--headless", "--disable-gpu", "--no-sandbox"}
 	)
 	if err := driver.Start(); err != nil {
 		log.Fatal(err)
