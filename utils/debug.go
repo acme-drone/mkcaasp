@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"mkcaasp/utils"
 	"os"
 	"os/exec"
 	"strings"
@@ -76,9 +75,9 @@ func CheckVersions() {
 	}
 }
 
-func CheckSaltMinions() {
-	b := make(map[string]utils.SaltCluster)
-	var saltcluster utils.SaltCluster
+func CheckSaltMinions(homedir string, caaspdir string) {
+	b := make(map[string]SaltCluster)
+	var saltcluster SaltCluster
 	args := []string{"-repo", "/home/atighineanu/work/CaaSP_kube/automation", "-auth", "openstack.json", "-cmd", "\"hostname\""}
 	out, err := exec.Command("caasp", args...).CombinedOutput()
 	if err != nil {
@@ -93,9 +92,6 @@ func CheckSaltMinions() {
 			saltcluster.Name = strings.Replace(temp[i+1], " ", "", 1)
 			b[strings.Replace(temp[i], " ", "", 1)] = saltcluster
 		}
-		//	if temp[i] != "" && strings.Contains(temp[i], ":") {
-		//		fmt.Printf("b[%s]= %s\n", temp[i], b[temp[i]])
-		//	}
 	}
 
 	args = []string{"-repo", "/home/atighineanu/work/CaaSP_kube/automation", "-auth", "openstack.json", "-cmd", "\"cat /etc/salt/grains\""}
@@ -124,15 +120,10 @@ func CheckSaltMinions() {
 					break
 				}
 			}
-			//fmt.Println(b[strings.Replace(temp[i], " ", "", 1)])
 		}
-		//fmt.Printf("temp[%v] = %s\n", i, temp[i])
-		//if temp[i] != "" && strings.Contains(temp[i], ":") && !strings.Contains(temp[i], "reboot") && !strings.Contains(temp[i], "roles") && !strings.Contains(temp[i], "bootstrap") {
-		//	fmt.Printf("b[%s]= %s\n", temp[i], b[temp[i]])
-		//}
 	}
 
-	a := utils.CAASPOutReturner("openstack.json", "/home/atighineanu/work/CaaSP_kube/automation", "caasp-openstack-terraform")
+	a := CAASPOutReturner("openstack.json", "/home/atighineanu/work/CaaSP_kube/automation", "caasp-openstack-terraform")
 	var IPslicer []string
 	IPslicer = append(IPslicer, a.IPAdminExt.Value)
 	for _, k := range a.IPMastersExt.Value {
@@ -144,7 +135,7 @@ func CheckSaltMinions() {
 
 	for _, k := range IPslicer {
 		temp1 := ""
-		out, err := a.SSHCommand(k, "hostname").CombinedOutput()
+		out, err := a.SSHCommand(k, homedir, caaspdir, "hostname").CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
 		}
@@ -164,7 +155,7 @@ func CheckSaltMinions() {
 
 	args = []string{"cat", "/etc/salt/grains"}
 	for _, value := range b {
-		out, err := value.SSHCmd(value.IP, args...).CombinedOutput()
+		out, err := value.SSHCmd(value.IP, homedir, caaspdir, args...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
 		}
@@ -180,8 +171,8 @@ func CheckSaltMinions() {
 			log.Println("This node needs to be updated!")
 			log.Printf("Updating...")
 
-			out := value.SSHCmd(value.IP, "/usr/sbin/transactional-update cleanup dup reboot")
-			utils.NiceBufRunner(out)
+			out := value.SSHCmd(value.IP, homedir, caaspdir, "/usr/sbin/transactional-update cleanup dup reboot")
+			NiceBufRunner(out)
 		}
 	}
 

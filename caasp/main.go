@@ -8,6 +8,7 @@ import (
 	"mkcaasp/utils"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -181,7 +182,7 @@ func main() {
 	//----------------------Cluster - Related - Commands (orchestration)
 	os.Chdir(*home)
 	if *refresh {
-		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "refresh", "")
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "refresh", "")
 		if !strings.Contains(err, "nil") {
 			fmt.Printf("%s\n%s\n", out, err)
 		} else {
@@ -190,7 +191,7 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *cmd != "" {
-		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "command", *cmd)
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "command", *cmd)
 		if !strings.Contains(err, "nil") {
 			fmt.Printf("%s\n%s\n", out, err)
 		} else {
@@ -199,7 +200,7 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *disable {
-		out, err := utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "disable", "")
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "disable", "")
 		if !strings.Contains(err, "nil") {
 			fmt.Printf("%s\n%s\n", out, err)
 		} else {
@@ -208,29 +209,33 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *register {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
 	}
 	os.Chdir(*home)
 	if *addrepo != "" {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "addrepo", *addrepo)
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "addrepo", *addrepo)
 	}
 	os.Chdir(*home)
 	if *sysupd {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "update", "")
+		utils.CheckSaltMinions(*home, caaspDir)
+		time.Sleep(2000 * time.Second)
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "update", "")
+		time.Sleep(30 * time.Second)
+		utils.CheckSaltMinions(*home, caaspDir)
 	}
 	os.Chdir(*home)
 	if *packupd != "" {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "packupdate", *packupd)
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "packupdate", *packupd)
 	}
 	os.Chdir(*home)
 	if *new {
-		utils.AdminOrchCmd(utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
 	}
 	os.Chdir(*home)
 	if *uiupd {
 		a := utils.CAASPOutReturner(*openstack, *home, caaspDir)
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
-		utils.VelumUpdater(a)
+		utils.VelumUpdater(*home, caaspDir, a)
 	}
 }

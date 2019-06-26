@@ -20,7 +20,7 @@ const (
 	passwd = "123456789"
 )
 
-func VelumUpdater(nodes *CAASPOut) {
+func VelumUpdater(homedir string, caaspdir string, nodes *CAASPOut) {
 	t := time.Now()
 	hosts := len(nodes.IPMastersExt.Value) + len(nodes.IPWorkersExt.Value)
 	driver := agouti.ChromeDriver(
@@ -72,7 +72,7 @@ func VelumUpdater(nodes *CAASPOut) {
 
 	for {
 		time.Sleep(10 * time.Second)
-		out, er := AdminOrchCmd(nodes, "refresh", "")
+		out, er := AdminOrchCmd(homedir, caaspdir, nodes, "refresh", "")
 		if !strings.Contains(er, "nil") {
 			fmt.Printf("%s\n%s\n", out, er)
 		} else {
