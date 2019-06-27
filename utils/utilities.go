@@ -46,7 +46,7 @@ func SetOSEnv(file string) (EnvOS, error) {
 
 func (s *SaltCluster) SSHCmd(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
 	arg := append(
-		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", homedir + "/" + caaspdir + "/ssh/id_caasp",
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
 			fmt.Sprintf("root@%s", IP),
 		},
 		cmd...,
@@ -56,7 +56,7 @@ func (s *SaltCluster) SSHCmd(IP string, homedir string, caaspdir string, cmd ...
 
 func (s *CAASPOut) SSHCommand(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
 	arg := append(
-		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", homedir + "/" + caaspdir + "/ssh/id_caasp",
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
 			fmt.Sprintf("root@%s", IP),
 		},
 		cmd...,

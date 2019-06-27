@@ -75,15 +75,16 @@ func CheckVersions() {
 	}
 }
 
-func CheckSaltMinions(homedir string, caaspdir string) {
+func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
+	a := CAASPOutReturner("openstack.json", homedir, caaspdir)
 	b := make(map[string]SaltCluster)
 	var saltcluster SaltCluster
-	args := []string{"-repo", "/home/atighineanu/work/CaaSP_kube/automation", "-auth", "openstack.json", "-cmd", "\"hostname\""}
-	out, err := exec.Command("caasp", args...).CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "running mkcaasp command failed: %s\n", err)
+
+	out, err := AdminOrchCmd(homedir, caaspdir, a, "command", "hostname")
+	if err != "%!s(<nil>)" {
+		fmt.Fprintf(os.Stdout, "running mkcaasp command failed: %v\n", err)
 	}
-	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
+	temp := strings.Split(out, "\n")
 	if strings.Contains(temp[0], "arning:") {
 		temp[0] = ""
 	}
@@ -94,36 +95,6 @@ func CheckSaltMinions(homedir string, caaspdir string) {
 		}
 	}
 
-	args = []string{"-repo", "/home/atighineanu/work/CaaSP_kube/automation", "-auth", "openstack.json", "-cmd", "\"cat /etc/salt/grains\""}
-	out, err = exec.Command("caasp", args...).CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "running mkcaasp command failed: %s\n", err)
-	}
-	temp = strings.Split(fmt.Sprintf("%s", string(out)), "\n")
-	if strings.Contains(temp[0], "arning:") {
-		temp[0] = ""
-	}
-	for i := 1; i < len(temp)-1; i++ {
-		if _, ok := b[strings.Replace(temp[i], " ", "", 1)]; ok {
-			saltcluster = b[strings.Replace(temp[i], " ", "", 1)]
-			for j := 1; j < len(temp)-i; j++ {
-				if _, ok := b[strings.Replace(temp[i+j], " ", "", 1)]; ok {
-					if strings.Contains(temp[i+j-1], "reboot_needed: true") {
-						saltcluster.RebootNeeded = true
-						b[strings.Replace(temp[i], " ", "", 1)] = saltcluster
-					}
-					break
-				}
-				if temp[i+j] == "" && strings.Contains(temp[i+j-1], "reboot_needed: true") {
-					saltcluster.RebootNeeded = true
-					b[strings.Replace(temp[i], " ", "", 1)] = saltcluster
-					break
-				}
-			}
-		}
-	}
-
-	a := CAASPOutReturner("openstack.json", "/home/atighineanu/work/CaaSP_kube/automation", "caasp-openstack-terraform")
 	var IPslicer []string
 	IPslicer = append(IPslicer, a.IPAdminExt.Value)
 	for _, k := range a.IPMastersExt.Value {
@@ -135,7 +106,8 @@ func CheckSaltMinions(homedir string, caaspdir string) {
 
 	for _, k := range IPslicer {
 		temp1 := ""
-		out, err := a.SSHCommand(k, homedir, caaspdir, "hostname").CombinedOutput()
+		temp2 := false
+		out, err := a.SSHCommand(k, homedir, caaspdir, "hostname; cat /etc/salt/grains").CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
 		}
@@ -144,40 +116,22 @@ func CheckSaltMinions(homedir string, caaspdir string) {
 			if strings.Contains(tmp[i], "caasp-") {
 				temp1 = tmp[i]
 			}
+			if strings.Contains(tmp[i], "reboot_needed: true") {
+				temp2 = true
+			}
 		}
+
 		for key, value := range b {
 			if strings.Contains(value.Name, strings.Replace(temp1, " ", "", 1)) {
 				value.IP = k
+				value.RebootNeeded = temp2
 				b[key] = value
 			}
 		}
 	}
 
-	args = []string{"cat", "/etc/salt/grains"}
-	for _, value := range b {
-		out, err := value.SSHCmd(value.IP, homedir, caaspdir, args...).CombinedOutput()
-		if err != nil {
-			fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
-		}
-		tmp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
-		c := 0
-		for _, k := range tmp {
-			fmt.Println(k)
-			if strings.Contains(k, "reboot_needed") {
-				c++
-			}
-		}
-		if c == 0 && value.RebootNeeded == false {
-			log.Println("This node needs to be updated!")
-			log.Printf("Updating...")
-
-			out := value.SSHCmd(value.IP, homedir, caaspdir, "/usr/sbin/transactional-update cleanup dup reboot")
-			NiceBufRunner(out)
-		}
-	}
-
 	//---------------------final checker
 	for key, value := range b {
-		fmt.Printf("b[%s] = %s\n", key, value)
+		fmt.Printf("b[%s] = %v\n", key, value)
 	}
 }
