@@ -162,7 +162,6 @@ func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, c
 	}
 	if option == "update" || option == "packupdate" {
 		var cmd *exec.Cmd
-		var stdoutBuf, stderrBuf bytes.Buffer
 		//----------system update and updating a development package have slightly different workflow
 		transactupdconf := []string{"REBOOT_METHOD=salt", "ZYPPER_AUTO_IMPORT_KEYS=1"}
 		for i := 0; i < len(transactupdconf); i++ {
@@ -175,7 +174,7 @@ func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, c
 
 		if option == "update" {
 			cmdtorun := append(alias, []string{"cmd.run", "'transactional-update cleanup dup reboot'"}...)
-			cmd = s.SSHCommand(homedir, caaspdir, s.IPAdminExt.Value, cmdtorun...)
+			cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 		} else {
 			//-------if package -> first setting transact-up.conf to allow automatic -y accept development packages
 			out, err := AdminOrchCmd(homedir, caaspdir, s, "command", "cat /etc/transactional-update.conf")
@@ -184,36 +183,13 @@ func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, c
 			}
 			if strings.Contains(out, "REBOOT_METHOD=salt") && strings.Contains(out, "ZYPPER_AUTO_IMPORT_KEYS=1") {
 				cmdtorun := append(alias, []string{"cmd.run", "'transactional-update", "reboot", "pkg", "install", "-y", command + "'"}...)
-				cmd = s.SSHCommand(homedir, caaspdir, s.IPAdminExt.Value, cmdtorun...)
+				cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 			} else {
 				log.Fatalf("AdminOrchCmd->package update: the trans-update.conf file not properly set up: %s\n", out)
 			}
 		}
-		newEnv := append(os.Environ(), ENV...)
-		cmd.Env = newEnv
-		stdoutIn, _ := cmd.StdoutPipe()
-		stderrIn, _ := cmd.StderrPipe()
-		var errStdout, errStderr error
-		stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
-		stderr := io.MultiWriter(os.Stderr, &stderrBuf)
-		err := cmd.Start()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		go func() {
-			_, errStdout = io.Copy(stdout, stdoutIn)
-		}()
-		go func() {
-			_, errStderr = io.Copy(stderr, stderrIn)
-		}()
-		err = cmd.Wait()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		if errStdout != nil || errStderr != nil {
-			log.Fatal("AdminOrchCmd -> update: failed to capture stdout or stderr\n")
-		}
-		return stdoutBuf.String(), stderrBuf.String()
+		out, err := NiceBufRunner(cmd)
+		return out, err
 	}
 	if option == "new" {
 		AdminOrchCmd(homedir, caaspdir, s, "register", command)

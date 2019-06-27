@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type PackageData struct {
@@ -75,6 +76,33 @@ func CheckVersions() {
 	}
 }
 
+func CheckRebootNeeded(IP string, a *CAASPOut, homedir string, caaspdir string, list map[string]SaltCluster) {
+	temp1 := ""
+	temp2 := false
+	out, err := a.SSHCommand(IP, homedir, caaspdir, "hostname; cat /etc/salt/grains").CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
+	}
+	tmp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
+	for i := 0; i < len(tmp); i++ {
+		if strings.Contains(tmp[i], "caasp-") {
+			temp1 = tmp[i]
+		}
+		if strings.Contains(tmp[i], "reboot_needed: true") {
+			temp2 = true
+		}
+	}
+
+	for key, value := range list {
+		if strings.Contains(value.Name, strings.Replace(temp1, " ", "", 1)) {
+			value.IP = IP
+			value.RebootNeeded = temp2
+			list[key] = value
+		}
+	}
+
+}
+
 func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
 	a := CAASPOutReturner("openstack.json", homedir, caaspdir)
 	b := make(map[string]SaltCluster)
@@ -105,29 +133,22 @@ func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
 	}
 
 	for _, k := range IPslicer {
-		temp1 := ""
-		temp2 := false
-		out, err := a.SSHCommand(k, homedir, caaspdir, "hostname; cat /etc/salt/grains").CombinedOutput()
-		if err != nil {
-			fmt.Fprintf(os.Stdout, "running SSHCommand when debugging salt crashed... %s", err)
-		}
-		tmp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
-		for i := 0; i < len(tmp); i++ {
-			if strings.Contains(tmp[i], "caasp-") {
-				temp1 = tmp[i]
-			}
-			if strings.Contains(tmp[i], "reboot_needed: true") {
-				temp2 = true
-			}
-		}
+		CheckRebootNeeded(k, a, homedir, caaspdir, b)
+	}
 
-		for key, value := range b {
-			if strings.Contains(value.Name, strings.Replace(temp1, " ", "", 1)) {
-				value.IP = k
-				value.RebootNeeded = temp2
-				b[key] = value
-			}
+	for key, value := range b {
+		if value.RebootNeeded == false {
+			log.Printf("node %s (%s) needs to be updated. Updating...", key, value.Name)
+			time.Sleep(1 * time.Second)
+			out := value.SSHCmd(value.IP, homedir, caaspdir, "zypper -n --gpg-auto-import-keys ref")
+			NiceBufRunner(out)
+			out = value.SSHCmd(value.IP, homedir, caaspdir, "/usr/sbin/transactional-update cleanup dup reboot")
+			NiceBufRunner(out)
 		}
+	}
+
+	for _, k := range IPslicer {
+		CheckRebootNeeded(k, a, homedir, caaspdir, b)
 	}
 
 	//---------------------final checker

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"mkcaasp/tests"
 	"mkcaasp/utils"
 	"os"
 	"strings"
@@ -86,6 +87,7 @@ var (
 	packupd  = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
 	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
 	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
+	test     = flag.String("test", "", "triggers testing of the cluster (by running functions from mkaasp/tests")
 )
 
 const (
@@ -209,11 +211,21 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *register {
-		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		if !strings.Contains(err, "nil") {
+			fmt.Printf("%s\n%s\n", out, err)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
 	}
 	os.Chdir(*home)
 	if *addrepo != "" {
-		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "addrepo", *addrepo)
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "addrepo", *addrepo)
+		if !strings.Contains(err, "nil") {
+			fmt.Printf("%s\n%s\n", out, err)
+		} else {
+			fmt.Printf("%s\n", out)
+		}
 	}
 	os.Chdir(*home)
 	if *sysupd {
@@ -235,5 +247,11 @@ func main() {
 		velumURL := fmt.Sprintf("https://%s.nip.io", a.IPAdminExt.Value)
 		fmt.Fprintf(os.Stdout, "Velum warm up time: %2.2f Seconds\n", utils.CheckVelumUp(velumURL))
 		utils.VelumUpdater(*home, caaspDir, a)
+	}
+	if *test != "" {
+		a := utils.CAASPOutReturner(*openstack, *home, caaspDir)
+		if *test == "health" {
+			tests.HealthChecks(a, *home, caaspDir)
+		}
 	}
 }

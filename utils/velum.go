@@ -55,18 +55,20 @@ func VelumUpdater(homedir string, caaspdir string, nodes *CAASPOut) {
 	}
 	time.Sleep(4 * time.Second)
 
-	//-----------------UPDATE ADMIN NODE
-	if err := page.Find(".update-admin-btn").Click(); err != nil {
-		log.Fatal(err)
-	}
-	time.Sleep(2 * time.Second)
-	//---------------Reboot to update
-	if err := page.Find(".reboot-update-btn").Click(); err != nil {
-		log.Fatal(err)
-	}
+	/*
+		//-----------------UPDATE ADMIN NODE
+		if err := page.Find(".update-admin-btn").Click(); err != nil {
+			log.Fatal(err)
+		}
+		time.Sleep(2 * time.Second)
+		//---------------Reboot to update
+		if err := page.Find(".reboot-update-btn").Click(); err != nil {
+			log.Fatal(err)
+		}
 
-	log.Printf("Updating Admin for %2.2f seconds now...", time.Since(t).Seconds())
-	time.Sleep(100 * time.Second)
+		log.Printf("Updating Admin for %2.2f seconds now...", time.Since(t).Seconds())
+		time.Sleep(100 * time.Second)
+	*/
 	velumURL := fmt.Sprintf("https://%s.nip.io", nodes.IPAdminExt.Value)
 	log.Printf("Velum warm up time: %2.2f Seconds\n", CheckVelumUp(velumURL))
 
@@ -80,10 +82,9 @@ func VelumUpdater(homedir string, caaspdir string, nodes *CAASPOut) {
 		}
 
 		time.Sleep(time.Duration(10*hosts) * time.Second)
-		if err := page.Find(".reboot-update-btn"); err != nil {
-			if err := page.Find("#update-all-nodes").Click(); err == nil {
-				break
-			}
+
+		if err := page.Find("#update-all-nodes").Click(); err == nil {
+			break
 		}
 
 		time.Sleep(5 * time.Second)
@@ -115,7 +116,7 @@ func VelumUpdater(homedir string, caaspdir string, nodes *CAASPOut) {
 			}
 		}
 		go func() {
-			log.Printf("Updating cluster for %2.2f seconds now", time.Since(t).Seconds())
+			log.Printf("Retrying updating cluster for %2.2f seconds now", time.Since(t).Seconds())
 		}()
 		time.Sleep(20 * time.Second)
 	}
