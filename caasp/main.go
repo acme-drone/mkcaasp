@@ -217,8 +217,6 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *sysupd {
-		utils.CheckSaltMinions(*home, caaspDir)
-		time.Sleep(2000 * time.Second)
 		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "update", "")
 		time.Sleep(30 * time.Second)
 		utils.CheckSaltMinions(*home, caaspDir)
