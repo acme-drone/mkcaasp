@@ -44,10 +44,20 @@ func SetOSEnv(file string) (EnvOS, error) {
 	return env, nil
 }
 
-func (s *CAASPOut) SSHCommand(cmd ...string) *exec.Cmd {
+func (s *SaltCluster) SSHCmd(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
 	arg := append(
-		[]string{"-o", "StrictHostKeyChecking=no",
-			fmt.Sprintf("root@%s", s.IPAdminExt.Value),
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
+			fmt.Sprintf("root@%s", IP),
+		},
+		cmd...,
+	)
+	return exec.Command("ssh", arg...)
+}
+
+func (s *CAASPOut) SSHCommand(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
+	arg := append(
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
+			fmt.Sprintf("root@%s", IP),
 		},
 		cmd...,
 	)
@@ -75,13 +85,42 @@ func CAASPOutReturner(openstack string, homedir string, caaspDir string) *CAASPO
 	return &a
 }
 
-func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
+func NiceBufRunner(cmd *exec.Cmd) (string, string) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	newEnv := append(os.Environ(), ENV...)
+	cmd.Env = newEnv
+	stdoutIn, _ := cmd.StdoutPipe()
+	stderrIn, _ := cmd.StderrPipe()
+	var errStdout, errStderr error
+	stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
+	stderr := io.MultiWriter(os.Stderr, &stderrBuf)
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
+	}
+	go func() {
+		_, errStdout = io.Copy(stdout, stdoutIn)
+	}()
+	go func() {
+		_, errStderr = io.Copy(stderr, stderrIn)
+	}()
+	err = cmd.Wait()
+	if err != nil {
+		return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
+	}
+	if errStdout != nil || errStderr != nil {
+		log.Fatal("AdminOrchCmd -> update: failed to capture stdout or stderr\n")
+	}
+	return stdoutBuf.String(), stderrBuf.String()
+}
+
+func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, command string) (string, string) {
 	var err error
 	alias := []string{"docker", "exec", "$(docker ps -q --filter name=salt-master)", "salt", "-P", "\"roles:admin|kube-master|kube-minion\""}
 	//------------sweeping through options...
 	if option == "refresh" {
 		cmd := append(alias, "saltutil.refresh_grains")
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -89,7 +128,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "command" {
 		cmd := append(alias, "cmd.run", "'"+command+"'")
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -97,7 +136,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "disable" {
 		cmd := append(alias, []string{"cmd.run", "'systemctl disable --now transactional-update.timer'"}...)
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -106,7 +145,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	if option == "register" {
 		cmdtorun := "'transactional-update register -r " + command + "'"
 		cmd := append(alias, []string{"cmd.run", cmdtorun}...)
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -114,7 +153,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "addrepo" {
 		cmdtorun := append(alias, "cmd.run 'zypper ar "+command+"'")
-		out, err := s.SSHCommand(cmdtorun...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "AdmOrchCmd -> addrepo: ssh command didn't run as expected: %s\n", err)
 		}
@@ -123,66 +162,43 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "update" || option == "packupdate" {
 		var cmd *exec.Cmd
-		var stdoutBuf, stderrBuf bytes.Buffer
 		//----------system update and updating a development package have slightly different workflow
+		transactupdconf := []string{"REBOOT_METHOD=salt", "ZYPPER_AUTO_IMPORT_KEYS=1"}
+		for i := 0; i < len(transactupdconf); i++ {
+			if i == 0 {
+				AdminOrchCmd(homedir, caaspdir, s, "command", "echo "+transactupdconf[i]+" > /etc/transactional-update.conf")
+			} else {
+				AdminOrchCmd(homedir, caaspdir, s, "command", "echo "+transactupdconf[i]+" >> /etc/transactional-update.conf")
+			}
+		}
+
 		if option == "update" {
 			cmdtorun := append(alias, []string{"cmd.run", "'transactional-update cleanup dup reboot'"}...)
-			cmd = s.SSHCommand(cmdtorun...)
+			cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 		} else {
 			//-------if package -> first setting transact-up.conf to allow automatic -y accept development packages
-			transactupdconf := []string{"REBOOT_METHOD=salt", "ZYPPER_AUTO_IMPORT_KEYS=1"}
-			for i := 0; i < len(transactupdconf); i++ {
-				if i == 0 {
-					AdminOrchCmd(s, "command", "echo "+transactupdconf[i]+" > /etc/transactional-update.conf")
-				} else {
-					AdminOrchCmd(s, "command", "echo "+transactupdconf[i]+" >> /etc/transactional-update.conf")
-				}
-			}
-			out, err := AdminOrchCmd(s, "command", "cat /etc/transactional-update.conf")
+			out, err := AdminOrchCmd(homedir, caaspdir, s, "command", "cat /etc/transactional-update.conf")
 			if !strings.Contains(err, "nil") {
 				return out, err
 			}
 			if strings.Contains(out, "REBOOT_METHOD=salt") && strings.Contains(out, "ZYPPER_AUTO_IMPORT_KEYS=1") {
 				cmdtorun := append(alias, []string{"cmd.run", "'transactional-update", "reboot", "pkg", "install", "-y", command + "'"}...)
-				cmd = s.SSHCommand(cmdtorun...)
+				cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 			} else {
 				log.Fatalf("AdminOrchCmd->package update: the trans-update.conf file not properly set up: %s\n", out)
 			}
 		}
-		newEnv := append(os.Environ(), ENV...)
-		cmd.Env = newEnv
-		stdoutIn, _ := cmd.StdoutPipe()
-		stderrIn, _ := cmd.StderrPipe()
-		var errStdout, errStderr error
-		stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
-		stderr := io.MultiWriter(os.Stderr, &stderrBuf)
-		err := cmd.Start()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		go func() {
-			_, errStdout = io.Copy(stdout, stdoutIn)
-		}()
-		go func() {
-			_, errStderr = io.Copy(stderr, stderrIn)
-		}()
-		err = cmd.Wait()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		if errStdout != nil || errStderr != nil {
-			log.Fatal("AdminOrchCmd -> update: failed to capture stdout or stderr\n")
-		}
-		return stdoutBuf.String(), stderrBuf.String()
+		out, err := NiceBufRunner(cmd)
+		return out, err
 	}
 	if option == "new" {
-		AdminOrchCmd(s, "register", command)
+		AdminOrchCmd(homedir, caaspdir, s, "register", command)
 		time.Sleep(10 * time.Second)
-		AdminOrchCmd(s, "disable", "")
+		AdminOrchCmd(homedir, caaspdir, s, "disable", "")
 		time.Sleep(10 * time.Second)
-		AdminOrchCmd(s, "update", "")
+		AdminOrchCmd(homedir, caaspdir, s, "update", "")
 		time.Sleep(20 * time.Second)
-		AdminOrchCmd(s, "refresh", "")
+		AdminOrchCmd(homedir, caaspdir, s, "refresh", "")
 	}
 	return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
 }
