@@ -65,6 +65,7 @@ var (
 	libvirt       = flag.String("tflibvirt", "", "switch for terraform-libvirt option")
 	openstack     = flag.String("auth", "openstack.json", "name of the json file containing openstack variables")
 	action        = flag.String("action", "apply", "terraform action to run, example: apply, destroy")
+	regcode       = flag.String("regcode", "NOTVALID", "SCC-key")
 	caasp         = flag.Bool("createcaasp", false, "enables/disables caasp terraform openstack setup")
 	ses           = flag.Bool("createses", false, "enables/disables ses terraform openstack setup")
 	howto         = flag.Bool("usage", false, "prints usage information")
@@ -211,7 +212,7 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *register {
-		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		out, err := utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "register", *regcode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
 		if !strings.Contains(err, "nil") {
 			fmt.Printf("%s\n%s\n", out, err)
 		} else {
@@ -239,7 +240,8 @@ func main() {
 	}
 	os.Chdir(*home)
 	if *new {
-		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", *regcode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+
 	}
 	os.Chdir(*home)
 	if *uiupd {
