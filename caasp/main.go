@@ -88,6 +88,7 @@ var (
 	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
 	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
 	test     = flag.String("test", "", "triggers testing of the cluster (by running functions from mkaasp/tests")
+	version  = flag.String("v", "3", "triggers automation on CaaSPv4")
 )
 
 const (
@@ -100,6 +101,9 @@ var Cluster *utils.CaaSPCluster
 
 func main() {
 	flag.Parse()
+	if *version != "3" {
+
+	}
 	if *howto {
 		fmt.Fprintf(os.Stdout, "%v\n", howtouse)
 		os.Exit(0)
@@ -240,6 +244,8 @@ func main() {
 	os.Chdir(*home)
 	if *new {
 		utils.AdminOrchCmd(*home, caaspDir, utils.CAASPOutReturner(*openstack, *home, caaspDir), "new", utils.RegCode) // <<----------- unexistent variable! put your SCC regcode here!!!!!
+		time.Sleep(30 * time.Second)
+		utils.CheckSaltMinions(*home, caaspDir)
 	}
 	os.Chdir(*home)
 	if *uiupd {
