@@ -1,0 +1,14 @@
+{
+    "platform": "vmware",
+    "deploy": "terraform",
+    "vmware": {
+        "GOVC_URL": "vmwareURL",
+        "GOVC_USERNAME": "username@vmwareURL",
+        "GOVC_PASSWORD": "password",
+        "GOVC_INSECURE": 1,
+        "VSPHERE_SERVER": "vmwareURL",
+        "VSPHERE_USER":  "username@vmwareURL",
+        "VSPHERE_PASSWORD": "password",
+        "VSPHERE_ALLOW_UNVERIFIED_SSL": true
+    }
+}
