@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var Cluster CaaSPCluster
@@ -203,34 +204,67 @@ func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, c
 	return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
 }
 
-func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *CaaSPCluster {
-	var err error
-	temp := strings.Split(append, "")
-	if len(temp) > 4 {
-		log.Fatalf("Check your syntaxis...there must be just four symbols in -addnodes argument\n(Negative or double digit values not supported...)")
-	} else {
-		//-------------------PARSING the argument of -addnodes or -nodes
-		for i := 0; i < len(temp); i++ {
-			if temp[i] == "w" {
-				if len(temp) >= i+2 {
-					Cluster.WorkCount, err = strconv.Atoi(temp[i+1])
+func AppendParse(appendnodes string) (int, int) {
+	append := strings.Split(appendnodes, "")
+	var count, tmp, workers, masters int
+	for i := 0; i < len(append); i++ {
+		if append[i] == "w" {
+			for {
+				count++
+				if i+count > len(append)-1 {
+					workers = tmp
+					break
+				}
+				r := []rune(append[i+count])
+				if !unicode.IsDigit(r[0]) {
+					workers = tmp
+					break
+				} else {
+					add, err := strconv.Atoi(append[i+count])
 					if err != nil {
-						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.WorkCount: error while strconv.\n%s", err)
+						fmt.Println("error! %s", err)
 					}
-					fmt.Printf("Adding %v workers.\n", Cluster.WorkCount)
+					if count > 1 {
+						tmp *= 10
+					}
+					tmp += add
 				}
 			}
-			if temp[i] == "m" {
-				if len(temp) >= i+2 {
-					Cluster.MastCount, err = strconv.Atoi(temp[i+1])
+		}
+		count = 0
+		tmp = 0
+		if append[i] == "m" {
+			for {
+				count++
+				if i+count > len(append)-1 {
+					masters = tmp
+					break
+				}
+				r := []rune(append[i+count])
+				if !unicode.IsDigit(r[0]) {
+					masters = tmp
+					break
+				} else {
+					add, err := strconv.Atoi(append[i+count])
 					if err != nil {
-						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.MastCount: error while strconv.\n%s", err)
+						fmt.Println("error! %s", err)
 					}
-					fmt.Printf("Adding %v masters.\n", Cluster.MastCount)
+					if count > 1 {
+						tmp *= 10
+					}
+					tmp += add
 				}
 			}
 		}
 	}
+	return masters, workers
+}
+
+func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *CaaSPCluster {
+	var err error
+	//-------------------PARSING the argument of -addnodes or -nodes
+	Cluster.MastCount, Cluster.WorkCount = AppendParse(append)
+	fmt.Printf("adding:\n%v masters\n%v workers\n", Cluster.MastCount, Cluster.WorkCount)
 
 	//------------Calculating the value Cluster.Diff (delta of nodes compared to actual cluster state),
 	//            on which logic of velum.Uiinst function is working...

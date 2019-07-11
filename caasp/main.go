@@ -65,6 +65,7 @@ var (
 	libvirt       = flag.String("tflibvirt", "", "switch for terraform-libvirt option")
 	openstack     = flag.String("auth", "openstack.json", "name of the json file containing openstack variables")
 	action        = flag.String("action", "apply", "terraform action to run, example: apply, destroy")
+	regcode       = flag.String("regcode", "NOTVALID", "SCC-key")
 	caasp         = flag.Bool("createcaasp", false, "enables/disables caasp terraform openstack setup")
 	ses           = flag.Bool("createses", false, "enables/disables ses terraform openstack setup")
 	howto         = flag.Bool("usage", false, "prints usage information")

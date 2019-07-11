@@ -18,9 +18,10 @@ type EnvOS []string
 
 // SaltCluster connects hashname of all nodes + hostname and IPs all together
 type SaltCluster struct {
-	Name         string
-	IP           string
-	RebootNeeded bool
+	Name           string
+	IP             string
+	RebootNeeded   bool
+	FailedServices int
 }
 
 // CAASPOut is holding caasp terraform output json variables

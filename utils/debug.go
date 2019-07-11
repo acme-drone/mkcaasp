@@ -103,11 +103,10 @@ func CheckRebootNeeded(IP string, a *CAASPOut, homedir string, caaspdir string, 
 
 }
 
-func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
+func CheckSaltMinions(homedir string, caaspdir string) map[string]SaltCluster { //nodes *CAASPOut) {
 	a := CAASPOutReturner("openstack.json", homedir, caaspdir)
 	b := make(map[string]SaltCluster)
 	var saltcluster SaltCluster
-
 	out, err := AdminOrchCmd(homedir, caaspdir, a, "command", "hostname")
 	if err != "%!s(<nil>)" {
 		fmt.Fprintf(os.Stdout, "running mkcaasp command failed: %v\n", err)
@@ -122,7 +121,6 @@ func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
 			b[strings.Replace(temp[i], " ", "", 1)] = saltcluster
 		}
 	}
-
 	var IPslicer []string
 	IPslicer = append(IPslicer, a.IPAdminExt.Value)
 	for _, k := range a.IPMastersExt.Value {
@@ -135,8 +133,25 @@ func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
 	for _, k := range IPslicer {
 		CheckRebootNeeded(k, a, homedir, caaspdir, b)
 	}
-
+	//---------------------final checker
 	for key, value := range b {
+		fmt.Printf("b[%s] = %v\n", key, value)
+	}
+	return b
+}
+
+func ByHandUpdater(homedir string, caaspdir string, list map[string]SaltCluster) {
+	a := CAASPOutReturner("openstack.json", homedir, caaspdir)
+	var IPslicer []string
+	IPslicer = append(IPslicer, a.IPAdminExt.Value)
+	for _, k := range a.IPMastersExt.Value {
+		IPslicer = append(IPslicer, k)
+	}
+	for _, k := range a.IPWorkersExt.Value {
+		IPslicer = append(IPslicer, k)
+	}
+
+	for key, value := range list {
 		if value.RebootNeeded == false {
 			log.Printf("node %s (%s) needs to be updated. Updating...", key, value.Name)
 			time.Sleep(1 * time.Second)
@@ -146,13 +161,20 @@ func CheckSaltMinions(homedir string, caaspdir string) { //nodes *CAASPOut) {
 			NiceBufRunner(out)
 		}
 	}
-
-	for _, k := range IPslicer {
-		CheckRebootNeeded(k, a, homedir, caaspdir, b)
-	}
-
-	//---------------------final checker
-	for key, value := range b {
-		fmt.Printf("b[%s] = %v\n", key, value)
-	}
 }
+
+/*
+func ConsumeTFstate(homedir string, caaspdir string) {
+	type Pem struct {
+		private_key_pem string `json: private_key_pem`
+	}
+
+	var ssh Pem
+
+	f, err := os.Open(filepath.Join(homedir, caaspdir, "terraform.tfstate"))
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Error at opening terraform.tfstate: %s", err)
+	}
+
+}
+*/
