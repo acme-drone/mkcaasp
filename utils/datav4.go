@@ -46,5 +46,9 @@ type Node struct {
 	PackHealth bool
 	RepoHealth bool
 	Services   bool
-	Systemd    bool
+	Systemd    string
+	K8sHealth  *K8s
+}
+
+type K8s struct {
 }
