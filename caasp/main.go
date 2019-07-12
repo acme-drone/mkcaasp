@@ -103,12 +103,19 @@ var Cluster *utils.CaaSPCluster
 
 func main() {
 	flag.Parse()
-	if *version != "3" {
+	if *version == "4" {
 		fmt.Println(utils.Mkcaasproot, Mkcaasproot)
-		tf := utils.TFParser()
-		//fmt.Println(*tf.IP_Masters)
-		utils.OSExporter(tf)
-		utils.ClusterCheckBuilder(tf)
+		if *caasp {
+			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
+				/*tf := utils.TFParser()
+				fmt.Printf("%s", tf)
+				if tf != nil {
+					utils.NodeOSExporter(tf)
+				}*/
+				//utils.CreateCaasp4(*action)
+				utils.DeployCaasp4()
+			}
+		}
 	} else {
 		if *howto {
 			fmt.Fprintf(os.Stdout, "%v\n", howtouse)
