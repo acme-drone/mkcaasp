@@ -70,7 +70,7 @@ func CheckIPSSH(node Node) Node {
 	command := []string{"ping", "-c", "3", node.IP}
 	out, err := exec.Command(command[0], command[1:]...).CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Error while running ping %s: %s", node.IP, err)
+		fmt.Fprintf(os.Stdout, "func CheckIPSSH -> Error while running ping %s: %s", node.IP, err)
 	}
 	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
 	for _, k := range temp {
@@ -85,7 +85,7 @@ func CheckIPSSH(node Node) Node {
 	command = []string{"nc", "-zvw3", node.IP, "22"}
 	out, err = exec.Command(command[0], command[1:]...).CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Error while running nc -zvw3 %s 22: %s", node.IP, err)
+		fmt.Fprintf(os.Stdout, "Func CheckIPSSH -> Error while running nc -zvw3 %s 22: %s", node.IP, err)
 	}
 	if strings.Contains(fmt.Sprintf("%s", string(out)), "succeeded") {
 		node.Port22 = true
@@ -95,7 +95,7 @@ func CheckIPSSH(node Node) Node {
 	cmd := node.SSHCmd("", command)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Error while SSH-ing into the node %s:  %s", node.IP, err)
+		fmt.Fprintf(os.Stdout, "Func CheckIPSSH -> Error while SSH-ing into the node %s:  %s", node.IP, err)
 	}
 	if strings.Contains(fmt.Sprintf("%s", string(out)), "KEYWORD") {
 		node.SSH = true
@@ -105,11 +105,11 @@ func CheckIPSSH(node Node) Node {
 }
 
 func CheckNode(node Node) Node {
-	b := make(map[string]Node)
+
 	command := []string{"hostname"}
 	out, err := node.SSHCmd("", command).CombinedOutput()
 	if err != nil {
-		log.Printf("error while running SSH command: %s", err)
+		log.Printf("func CheckNode -> cmd.hostname: error while running SSH command: %s", err)
 	}
 	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
 	//------------Checking in the output of hostname
@@ -124,7 +124,7 @@ func CheckNode(node Node) Node {
 		command = []string{"sudo", "grep", "-R", "node-name", checkpath}
 		out, err = node.SSHCmd("", command).CombinedOutput()
 		if err != nil {
-			log.Printf("error while running SSH sudo grep command: %s", err)
+			log.Printf("func CheckNode -> error while running SSH sudo grep command: %s", err)
 		}
 		temp = strings.Split(fmt.Sprintf("%s", string(out)), " ")
 		for index, _ := range temp {
@@ -132,7 +132,6 @@ func CheckNode(node Node) Node {
 			if strings.Contains(temp[index], "pimp") {
 				//fmt.Printf("Here is the k8s name: %s \n", strings.Replace(temp[index], "\"", "", 10))
 				node.K8sName = strings.Replace(temp[index], "\"", "", 10)
-				b[node.IP] = node
 				break
 			}
 		}
@@ -140,7 +139,12 @@ func CheckNode(node Node) Node {
 	return node
 }
 
+func CheckSystemd(node Node) Node {
+
+}
+
 func ClusterCheckBuilder(a *TFOutput) {
+	b := make(map[string]Node)
 	var node Node
 	node.Username = "sles" //to be improved if different user for different roles...
 	for _, k := range a.IP_Load_Balancer.Value {
@@ -148,21 +152,24 @@ func ClusterCheckBuilder(a *TFOutput) {
 		node := CheckIPSSH(node)
 		node.Role = "Load_Balancer"
 		node = CheckNode(node)
-		fmt.Println(node)
+		b[k] = node
 	}
 	for _, k := range a.IP_Masters.Value {
 		node.IP = k
 		node := CheckIPSSH(node)
 		node.Role = "Master"
 		node = CheckNode(node)
-		fmt.Println(node)
+		b[k] = node
 	}
 	for _, k := range a.IP_Workers.Value {
 		node.IP = k
 		node := CheckIPSSH(node)
 		node.Role = "Worker"
 		node = CheckNode(node)
-		fmt.Println(node)
+		b[k] = node
+	}
+	for key, value := range b {
+		fmt.Printf("b[%s] = {%s %s %s}\n", key, value.K8sName, value.IP, value.NodeName)
 	}
 }
 
