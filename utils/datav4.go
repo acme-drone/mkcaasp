@@ -4,16 +4,15 @@ type MKCaaSPCfg struct {
 	Platform  string  `json: "platform"`
 	Deploy    string  `json: "deploy"`
 	Vmware    *VMWare `json: "vmware"`
-	Skubaroot string  `json: skubaroot`
+	Skubaroot string  `json: "skubaroot"`
 }
 
 type VMWare struct {
-	GOVC_URL      string
-	GOVC_USERNAME string
-	GOVC_PASSWORD string
-	GOVC_INSECURE int
-	//-------------
-	VSPHERE_SERVER               string
+	GOVC_URL                     string
+	GOVC_USERNAME                string
+	GOVC_PASSWORD                string `json: "GOVC_PASSWORD"`
+	GOVC_INSECURE                int
+	VSPHERE_SERVER               string `json: "VSPHERE_SERVER"`
 	VSPHERE_USER                 string
 	VSPHERE_PASSWORD             string
 	VSPHERE_ALLOW_UNVERIFIED_SSL bool
@@ -46,8 +45,20 @@ type Node struct {
 	PackHealth bool
 	RepoHealth bool
 	Services   bool
-	Systemd    string
+	Systemd    Systemd
 	K8sHealth  *K8s
+}
+
+type Systemd struct {
+	CriticalChain []CriticalChain
+	AnalyzeBlame  string
+	AllFine       bool
+}
+
+type CriticalChain struct {
+	Unit      string
+	TimeAt    string
+	TimeDelay string
 }
 
 type K8s struct {
