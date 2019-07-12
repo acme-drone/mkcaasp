@@ -9,29 +9,47 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"sync"
 )
 
 var (
 	Mkcaasproot = ""
-	config, err = CaaSP4CFG(Mkcaasproot)
-	skubaroot   = config.Skubaroot
+	Config, err = CaaSP4CFG(Mkcaasproot)
+	skubaroot   = Config.Skubaroot
 	clustername = "my-cluster"
 	//workdir      = filepath.Join(skubaroot, "test/lib/prototyping")
 	vmwaretfdir  = filepath.Join(skubaroot, "ci/infra/vmware")
 	myclusterdir = filepath.Join(vmwaretfdir, clustername)
 	testdir      = filepath.Join(skubaroot, "test/core-features")
+	ENV2         = os.Environ()
 )
+
+func VMWareexporter() {
+	a := []string{
+		"GOVC_URL=" + Config.Vmware.GOVC_URL,
+		"GOVC_USERNAME=" + Config.Vmware.GOVC_USERNAME,
+		"GOVC_PASSWORD=" + Config.Vmware.GOVC_PASSWORD,
+		"GOVC_INSECURE=" + string(Config.Vmware.GOVC_INSECURE),
+		//-------------
+		"VSPHERE_SERVER=" + Config.Vmware.VSPHERE_SERVER,
+		"VSPHERE_USER=" + Config.Vmware.VSPHERE_USER,
+		"VSPHERE_PASSWORD=" + Config.Vmware.VSPHERE_PASSWORD,
+		"VSPHERE_ALLOW_UNVERIFIED_SSL=" + strconv.FormatBool(Config.Vmware.VSPHERE_ALLOW_UNVERIFIED_SSL),
+	}
+	ENV2 = append(ENV2, a...)
+}
 
 func CaaSP4CFG(mkcaasproot string) (*MKCaaSPCfg, error) {
 	var a *MKCaaSPCfg
 	file, err := os.Open(filepath.Join(mkcaasproot, "mkcaaspcfg.json"))
 	defer file.Close()
 	if err != nil {
+		fmt.Printf("Coudn't open the file! %s\n", err)
 		return nil, err
 	}
 	if err := json.NewDecoder(file).Decode(&a); err != nil {
+		fmt.Printf("Coudn't decode! %s", err)
 		return nil, err
 	}
 	return a, err
@@ -51,126 +69,59 @@ func TFParser() *TFOutput {
 	return a
 }
 
-func OSExporter(a *TFOutput) {
-	ENV := os.Environ()
+func NodeOSExporter(a *TFOutput) []string {
 	for _, elem := range a.IP_Load_Balancer.Value {
-		ENV = append(ENV, fmt.Sprintf("CONTROLPLANE=%s", elem))
+		ENV2 = append(ENV2, fmt.Sprintf("CONTROLPLANE=%s", elem))
 	}
 	for index, elem := range a.IP_Masters.Value {
-		ENV = append(ENV, fmt.Sprintf("MASTER0%v=%s", index, elem))
+		ENV2 = append(ENV2, fmt.Sprintf("MASTER0%v=%s", index, elem))
 	}
 	for index, elem := range a.IP_Workers.Value {
-		ENV = append(ENV, fmt.Sprintf("WORKER0%v=%s", index, elem))
+		ENV2 = append(ENV2, fmt.Sprintf("WORKER0%v=%s", index, elem))
 	}
+	return ENV2
 }
 
-func CheckIPSSH(node Node) Node {
-	count := 0
-	//----------Checking if Node has network connection
-	command := []string{"ping", "-c", "3", node.IP}
-	out, err := exec.Command(command[0], command[1:]...).CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "func CheckIPSSH -> Error while running ping %s: %s", node.IP, err)
+func CreateCaasp4(action string) (string, string) {
+	var suffix string
+	var cmd *exec.Cmd
+	//----------------Deploying With Terraform-------------------
+	if action == "destroy" || action == "apply" {
+		suffix = "-auto-approve"
 	}
-	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
-	for _, k := range temp {
-		if strings.Contains(k, "ttl") {
-			count += 1
-		}
+	if suffix != "" {
+		cmd = exec.Command("terraform", action, suffix)
+	} else {
+		cmd = exec.Command("terraform", action)
 	}
-	if count >= 3 {
-		node.Network = true
+	cmd.Env = ENV2
+	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
+	if errstr != "%!s(<nil>)" && errstr != "" {
+		log.Printf("Error while running \"terraform command\":  %s", errstr)
+		return out, errstr
 	}
-	//----------Checking if Node has port 22 opened
-	command = []string{"nc", "-zvw3", node.IP, "22"}
-	out, err = exec.Command(command[0], command[1:]...).CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "Func CheckIPSSH -> Error while running nc -zvw3 %s 22: %s", node.IP, err)
-	}
-	if strings.Contains(fmt.Sprintf("%s", string(out)), "succeeded") {
-		node.Port22 = true
-	}
-	//---------Checking if Node ssh service is fine
-	command = []string{"echo", "KEYWORD"}
-	cmd := node.SSHCmd("", command)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "Func CheckIPSSH -> Error while SSH-ing into the node %s:  %s", node.IP, err)
-	}
-	if strings.Contains(fmt.Sprintf("%s", string(out)), "KEYWORD") {
-		node.SSH = true
-	}
-	//
-	return node
+	return out, errstr
 }
 
-func CheckNode(node Node) Node {
+func DeployCaasp4() (string, string) {
+	//---------------Deploying With Skuba-----------------------
+	tf := TFParser()
+	NodeOSExporter(tf)
+	b := ClusterCheckBuilder(tf, "setup")
+	cmd := exec.Command("skuba", "cluster", "init", "--control-plane", tf.IP_Load_Balancer.Value[0], clustername)
+	cmd.Dir = vmwaretfdir
+	cmd.Env = ENV2
+	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
+	if errstr != "%!s(<nil>)" && errstr != "" {
+		log.Printf("Error while running \"skuba init command\":  %s", errstr)
+		return out, errstr
+	}
 
-	command := []string{"hostname"}
-	out, err := node.SSHCmd("", command).CombinedOutput()
-	if err != nil {
-		log.Printf("func CheckNode -> cmd.hostname: error while running SSH command: %s", err)
-	}
-	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
-	//------------Checking in the output of hostname
-	for _, k := range temp {
-		if k != " " && k != "" && !strings.Contains(k, "known hosts") {
-			node.NodeName = k
-		}
-	}
-	if node.Role != "Load_Balancer" {
-		checkpath := "/var/log/pods"
-		//---checking in the logs for "Local node-name: xxxxxxxxxxxx" to find K8s Name of the node
-		command = []string{"sudo", "grep", "-R", "node-name", checkpath}
-		out, err = node.SSHCmd("", command).CombinedOutput()
-		if err != nil {
-			log.Printf("func CheckNode -> error while running SSH sudo grep command: %s", err)
-		}
-		temp = strings.Split(fmt.Sprintf("%s", string(out)), " ")
-		for index, _ := range temp {
-			//fmt.Println(temp[index])
-			if strings.Contains(temp[index], "pimp") {
-				//fmt.Printf("Here is the k8s name: %s \n", strings.Replace(temp[index], "\"", "", 10))
-				node.K8sName = strings.Replace(temp[index], "\"", "", 10)
-				break
-			}
-		}
-	}
-	return node
-}
+	for _, k := range tf.IP_Masters.Value {
 
-func CheckSystemd(node Node) Node {
+	}
 
-}
-
-func ClusterCheckBuilder(a *TFOutput) {
-	b := make(map[string]Node)
-	var node Node
-	node.Username = "sles" //to be improved if different user for different roles...
-	for _, k := range a.IP_Load_Balancer.Value {
-		node.IP = k
-		node := CheckIPSSH(node)
-		node.Role = "Load_Balancer"
-		node = CheckNode(node)
-		b[k] = node
-	}
-	for _, k := range a.IP_Masters.Value {
-		node.IP = k
-		node := CheckIPSSH(node)
-		node.Role = "Master"
-		node = CheckNode(node)
-		b[k] = node
-	}
-	for _, k := range a.IP_Workers.Value {
-		node.IP = k
-		node := CheckIPSSH(node)
-		node.Role = "Worker"
-		node = CheckNode(node)
-		b[k] = node
-	}
-	for key, value := range b {
-		fmt.Printf("b[%s] = {%s %s %s}\n", key, value.K8sName, value.IP, value.NodeName)
-	}
+	return out, errstr
 }
 
 func (node *Node) SSHCmd(workdir string, command []string) *exec.Cmd {
