@@ -9,41 +9,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
 var (
-	skubaroot    = "/home/atighineanu/golang/src/github.com/skuba"
-	clustername  = "my-cluster"
-	workdir      = filepath.Join(skubaroot, "test/lib/prototyping")
+	Mkcaasproot = ""
+	config, err = CaaSP4CFG(Mkcaasproot)
+	skubaroot   = config.Skubaroot
+	clustername = "my-cluster"
+	//workdir      = filepath.Join(skubaroot, "test/lib/prototyping")
 	vmwaretfdir  = filepath.Join(skubaroot, "ci/infra/vmware")
 	myclusterdir = filepath.Join(vmwaretfdir, clustername)
 	testdir      = filepath.Join(skubaroot, "test/core-features")
 )
 
-type TFOutput struct {
-	IP_Load_Balancer *TFTag `json: ip_load_balancer`
-	IP_Masters       *TFTag `json: ip_masters`
-	IP_Workers       *TFTag `json: ip_workers`
-}
-
-type TFTag struct {
-	Sensitive bool     `json: sensitive`
-	Type      string   `json: type`
-	Value     []string `json: value`
-}
-
-type ClusterCheck map[string]Node
-
-type Node struct {
-	IP         string
-	NodeName   string
-	Username   string
-	Network    bool
-	SSH        bool
-	ContHealth bool
-	PackHealth bool
-	RepoHealth bool
+func CaaSP4CFG(mkcaasproot string) (*MKCaaSPCfg, error) {
+	var a *MKCaaSPCfg
+	file, err := os.Open(filepath.Join(mkcaasproot, "mkcaaspcfg.json"))
+	defer file.Close()
+	if err != nil {
+		return nil, err
+	}
+	if err := json.NewDecoder(file).Decode(&a); err != nil {
+		return nil, err
+	}
+	return a, err
 }
 
 func TFParser() *TFOutput {
@@ -73,38 +64,105 @@ func OSExporter(a *TFOutput) {
 	}
 }
 
-func CheckIPSSH(node *Node) {
+func CheckIPSSH(node Node) Node {
+	count := 0
+	//----------Checking if Node has network connection
 	command := []string{"ping", "-c", "3", node.IP}
 	out, err := exec.Command(command[0], command[1:]...).CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(os.Stdout, "Error while running ping %s: %s", node.IP, err)
 	}
-	fmt.Println(fmt.Sprintf("%s", string(out)))
+	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
+	for _, k := range temp {
+		if strings.Contains(k, "ttl") {
+			count += 1
+		}
+	}
+	if count >= 3 {
+		node.Network = true
+	}
+	//----------Checking if Node has port 22 opened
+	command = []string{"nc", "-zvw3", node.IP, "22"}
+	out, err = exec.Command(command[0], command[1:]...).CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Error while running nc -zvw3 %s 22: %s", node.IP, err)
+	}
+	if strings.Contains(fmt.Sprintf("%s", string(out)), "succeeded") {
+		node.Port22 = true
+	}
+	//---------Checking if Node ssh service is fine
+	command = []string{"echo", "KEYWORD"}
+	cmd := node.SSHCmd("", command)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Error while SSH-ing into the node %s:  %s", node.IP, err)
+	}
+	if strings.Contains(fmt.Sprintf("%s", string(out)), "KEYWORD") {
+		node.SSH = true
+	}
+	//
+	return node
+}
+
+func CheckNode(node Node) Node {
+	b := make(map[string]Node)
+	command := []string{"hostname"}
+	out, err := node.SSHCmd("", command).CombinedOutput()
+	if err != nil {
+		log.Printf("error while running SSH command: %s", err)
+	}
+	temp := strings.Split(fmt.Sprintf("%s", string(out)), "\n")
+	//------------Checking in the output of hostname
+	for _, k := range temp {
+		if k != " " && k != "" && !strings.Contains(k, "known hosts") {
+			node.NodeName = k
+		}
+	}
+	if node.Role != "Load_Balancer" {
+		checkpath := "/var/log/pods"
+		//---checking in the logs for "Local node-name: xxxxxxxxxxxx" to find K8s Name of the node
+		command = []string{"sudo", "grep", "-R", "node-name", checkpath}
+		out, err = node.SSHCmd("", command).CombinedOutput()
+		if err != nil {
+			log.Printf("error while running SSH sudo grep command: %s", err)
+		}
+		temp = strings.Split(fmt.Sprintf("%s", string(out)), " ")
+		for index, _ := range temp {
+			//fmt.Println(temp[index])
+			if strings.Contains(temp[index], "pimp") {
+				//fmt.Printf("Here is the k8s name: %s \n", strings.Replace(temp[index], "\"", "", 10))
+				node.K8sName = strings.Replace(temp[index], "\"", "", 10)
+				b[node.IP] = node
+				break
+			}
+		}
+	}
+	return node
 }
 
 func ClusterCheckBuilder(a *TFOutput) {
-	var IPSlice []string
+	var node Node
+	node.Username = "sles" //to be improved if different user for different roles...
 	for _, k := range a.IP_Load_Balancer.Value {
-		IPSlice = append(IPSlice, k)
+		node.IP = k
+		node := CheckIPSSH(node)
+		node.Role = "Load_Balancer"
+		node = CheckNode(node)
+		fmt.Println(node)
 	}
 	for _, k := range a.IP_Masters.Value {
-		IPSlice = append(IPSlice, k)
+		node.IP = k
+		node := CheckIPSSH(node)
+		node.Role = "Master"
+		node = CheckNode(node)
+		fmt.Println(node)
 	}
 	for _, k := range a.IP_Workers.Value {
-		IPSlice = append(IPSlice, k)
-	}
-
-	for _, k := range IPSlice {
-		var node Node
 		node.IP = k
-		node.Username = "sles"
-		//command := []string{"ls -alh /var/log/pods"}
-		command := []string{"hostname"}
-		out, err := node.SSHCmd("", command).CombinedOutput()
-		if err != nil {
-			log.Printf("error while running SSH command: %s", err)
-		}
-		fmt.Println(fmt.Sprintf("%s", string(out)))
+		node := CheckIPSSH(node)
+		node.Role = "Worker"
+		node = CheckNode(node)
+		fmt.Println(node)
 	}
 }
 
