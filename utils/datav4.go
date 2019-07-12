@@ -1,6 +1,6 @@
 package utils
 
-type MkcaaspCfg struct {
+type MKCaaSPCfg struct {
 	Platform  string  `json: "platform"`
 	Deploy    string  `json: "deploy"`
 	Vmware    *VMWare `json: "vmware"`
@@ -31,15 +31,20 @@ type TFTag struct {
 	Value     []string `json: value`
 }
 
-type ClusterCheck map[string]CaaSPv4Node
+type ClusterCheck map[string]Node
 
-type CaaSPv4Node struct {
+type Node struct {
 	IP         string
 	NodeName   string
+	K8sName    string
+	Role       string
 	Username   string
 	Network    bool
+	Port22     bool
 	SSH        bool
 	ContHealth bool
 	PackHealth bool
 	RepoHealth bool
+	Services   bool
+	Systemd    bool
 }
