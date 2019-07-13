@@ -140,10 +140,9 @@ func JoinWorkers(tf *TFOutput, b map[string]Node) (string, string){
 	return out, errstr
 }
 
-func DeployCaasp4() (string, string) {
+func DeployCaasp4(tf *TFOutput) (string, string) {
 	//---------------Deploying With Skuba-----------------------
 	//var out, errstr string
-	tf := TFParser()
 	NodeOSExporter(tf)
 	b := ClusterCheckBuilder(tf, "setup")
 	cmd := exec.Command("skuba", "cluster", "init", "--control-plane", tf.IP_Load_Balancer.Value[0], clustername)
@@ -167,7 +166,7 @@ func DeployCaasp4() (string, string) {
 		cmd.Env = ENV2
 		out, errstr := NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
 		if errstr != "%!s(<nil>)" && errstr != "" {
-			log.Printf("Error while running \"skuba node bootstrap %s\":  %s", k8sname, errstr)
+			//log.Printf("Error while running \"skuba node bootstrap %s\":  %s", k8sname, errstr)
 			return out, errstr
 		}
 		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
