@@ -8,6 +8,16 @@ import (
 	"strings"
 )
 
+func CheckSkuba() (string, string){
+	cmd := exec.Command("skuba", "cluster", "status")
+	cmd.Dir = myclusterdir
+	out, errstr := NiceBuffRunner(cmd, myclusterdir)
+	if errstr != "%!s(<nil>)" && errstr != "" {
+		log.Printf("Error while running \"skuba cluster status\":  %s", errstr)
+	}
+	return out, errstr
+}
+
 func CheckIPSSH(node Node) Node {
 	count := 0
 	//----------Checking if Node has network connection
