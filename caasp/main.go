@@ -79,6 +79,7 @@ var (
 	home = flag.String("repo", "automation", "kubic automation repo location")
 	//pass     = flag.String("pass", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
 	//hash     = flag.String("key", "default", "chose which string is going to be your hash key")
+	
 	cmd      = flag.String("cmd", "", "the orchestration command to run from admin using salt-master container")
 	refresh  = flag.Bool("ref", false, "refreshing the salt grains from admin")
 	disable  = flag.Bool("dis", false, "disabling transactional-update from admin")
@@ -89,11 +90,13 @@ var (
 	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
 	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
 	test     = flag.String("test", "", "triggers testing of the cluster (by running functions from mkaasp/tests")
+	checkstatus = flag.Bool("status", false, "triggers skuba check status")
 	version  = flag.String("v", "3", "triggers automation on CaaSPv4")
 )
 
 const (
-	Mkcaasproot = "/home/atighineanu/golang/src/mkcaasp"
+	//Mkcaasproot = "/home/atighineanu/golang/src/mkcaasp"
+	Mkcaasproot = "/Users/alexeitighineanu/go/src/mkcaasp"
 	caaspDir    = "caasp-openstack-terraform"
 	sesDir      = "ses-openstack-terraform"
 	output      = "terraform output -json"
@@ -107,15 +110,25 @@ func main() {
 		fmt.Println(utils.Mkcaasproot, Mkcaasproot)
 		if *caasp {
 			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
-				/*tf := utils.TFParser()
-				fmt.Printf("%s", tf)
-				if tf != nil {
+				utils.CreateCaasp4(*action)
+				tf := utils.TFParser()
+				if *action != "apply" && *action != "destroy" {
 					utils.NodeOSExporter(tf)
-				}*/
-				//utils.CreateCaasp4(*action)
-				utils.DeployCaasp4()
+				}
+				if *action == "apply" {
+					utils.DeployCaasp4()
+				}				
 			}
 		}
+		if *addnodes != "" {
+			tf := utils.TFParser()
+			b := utils.ClusterCheckBuilder(tf, "setup")
+			utils.JoinWorkers(tf, b)
+		}
+		if *checkstatus {
+			utils.CheckSkuba()
+		}
+	//---------End of Version 4 ----------------------	
 	} else {
 		if *howto {
 			fmt.Fprintf(os.Stdout, "%v\n", howtouse)
