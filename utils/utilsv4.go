@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var (
@@ -36,6 +37,9 @@ func VMWareexporter() {
 		"VSPHERE_USER=" + Config.Vmware.VSPHERE_USER,
 		"VSPHERE_PASSWORD=" + Config.Vmware.VSPHERE_PASSWORD,
 		"VSPHERE_ALLOW_UNVERIFIED_SSL=" + strconv.FormatBool(Config.Vmware.VSPHERE_ALLOW_UNVERIFIED_SSL),
+	}
+	for _, k := range a {
+		exec.Command("export", k).Run()
 	}
 	ENV2 = append(ENV2, a...)
 }
@@ -86,42 +90,90 @@ func CreateCaasp4(action string) (string, string) {
 	var suffix string
 	var cmd *exec.Cmd
 	//----------------Deploying With Terraform-------------------
-	if action == "destroy" || action == "apply" {
+	if action == "apply" {
 		suffix = "-auto-approve"
+	}
+	if action == "destroy" {
+		suffix = "-auto-approve"
+		_, err := exec.Command("rm", "-R", myclusterdir).CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "Error removing the %s folder...%v", myclusterdir, err )
+		}
 	}
 	if suffix != "" {
 		cmd = exec.Command("terraform", action, suffix)
 	} else {
 		cmd = exec.Command("terraform", action)
 	}
+	fmt.Println(ENV2)
 	cmd.Env = ENV2
 	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
 		log.Printf("Error while running \"terraform command\":  %s", errstr)
 		return out, errstr
 	}
+	if action == "apply" {
+		log.Printf("The Nodes were successfully Deployed by %s on %s Platform", Config.Deploy, Config.Platform)
+		time.Sleep(10 * time.Second)
+	}
+	return out, errstr
+}
+
+func JoinWorkers(tf *TFOutput, b map[string]Node) (string, string){
+	var out, errstr string
+	for index, k := range tf.IP_Workers.Value {
+		fmt.Println(tf.IP_Workers.Value)
+		time.Sleep(10*time.Second)
+		k8sname := fmt.Sprintf("worker-pimp-comrade-0%v", index)
+		cmd := exec.Command("skuba", "node", "join", "--role", "worker", "--user", "sles", "--sudo", "--target", k, k8sname)
+		node := b[k]
+		node.K8sName = k8sname
+		b[k] = node
+		cmd.Dir = filepath.Join(vmwaretfdir, clustername)
+		cmd.Env = ENV2
+		out, errstr = NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
+		if errstr != "%!s(<nil>)" && errstr != "" {
+			log.Printf("Error while running \"skuba join worker command\":  %s", errstr)
+			return out, errstr
+		}
+	}
 	return out, errstr
 }
 
 func DeployCaasp4() (string, string) {
 	//---------------Deploying With Skuba-----------------------
+	//var out, errstr string
 	tf := TFParser()
 	NodeOSExporter(tf)
 	b := ClusterCheckBuilder(tf, "setup")
 	cmd := exec.Command("skuba", "cluster", "init", "--control-plane", tf.IP_Load_Balancer.Value[0], clustername)
-	cmd.Dir = vmwaretfdir
 	cmd.Env = ENV2
 	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
 		log.Printf("Error while running \"skuba init command\":  %s", errstr)
 		return out, errstr
+	}	
+	//fmt.Println(b)
+	log.Printf("Successfully initiated the cluster load balancer: %s ...\n", tf.IP_Load_Balancer.Value[0])
+	time.Sleep(20 * time.Second)
+	for index, k := range tf.IP_Masters.Value {
+		k8sname := fmt.Sprintf("master-pimp-general-0%v", index)
+		cmd := exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+		node := b[k]
+		node.K8sName = k8sname
+		b[k] = node
+		cmd.Dir = filepath.Join(vmwaretfdir, clustername)
+		fmt.Println(cmd.Dir)
+		cmd.Env = ENV2
+		out, errstr := NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
+		if errstr != "%!s(<nil>)" && errstr != "" {
+			log.Printf("Error while running \"skuba node bootstrap %s\":  %s", k8sname, errstr)
+			return out, errstr
+		}
+		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
 	}
-
-	for _, k := range tf.IP_Masters.Value {
-
-	}
-
-	return out, errstr
+	JoinWorkers(tf, b)
+ return out, errstr
 }
 
 func (node *Node) SSHCmd(workdir string, command []string) *exec.Cmd {
