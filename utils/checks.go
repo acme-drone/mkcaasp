@@ -8,6 +8,20 @@ import (
 	"strings"
 )
 
+func CheckOS() (string, error){
+	var sysos string
+	out, err := exec.Command("uname", "-a").CombinedOutput()
+	if err != nil{
+		fmt.Printf("utils.CheckOS -> Error while running uname -a")
+		return "", err
+	}
+	tmp := fmt.Sprintf("%s", string(out))
+	if strings.Contains(strings.ToLower(tmp), "darwin") || strings.Contains(strings.ToLower(tmp), "mac") {
+		sysos = "mac"
+	}
+	return sysos, err
+}
+
 func CheckSkuba() (string, string){
 	cmd := exec.Command("skuba", "cluster", "status")
 	cmd.Dir = myclusterdir
