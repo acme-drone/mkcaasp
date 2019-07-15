@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	MacHomedir = ""
 	Mkcaasproot = ""
 	Config, err = CaaSP4CFG(Mkcaasproot)
 	skubaroot   = Config.Skubaroot
@@ -76,14 +77,29 @@ func TFParser() *TFOutput {
 func NodeOSExporter(a *TFOutput) []string {
 	for _, elem := range a.IP_Load_Balancer.Value {
 		ENV2 = append(ENV2, fmt.Sprintf("CONTROLPLANE=%s", elem))
+		exec.Command("export", fmt.Sprintf("CONTROLPLANE=%s", elem)).Run()
 	}
 	for index, elem := range a.IP_Masters.Value {
 		ENV2 = append(ENV2, fmt.Sprintf("MASTER0%v=%s", index, elem))
+		exec.Command("export", fmt.Sprintf("CONTROLPLANE=%s", elem)).Run()
 	}
 	for index, elem := range a.IP_Workers.Value {
 		ENV2 = append(ENV2, fmt.Sprintf("WORKER0%v=%s", index, elem))
 	}
 	return ENV2
+}
+
+func RunGinkgo() string {
+	//cmd := exec.Command("go", "test")
+	ginkgofolder := filepath.Join(skubaroot, "test/core-features")
+	cmd := exec.Command("ginkgo", /*"-mod=vendor",*/"-r", ginkgofolder)
+	cmd.Env = ENV2
+	log.Println("Running ginko test now...")	
+	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
+	if errstr != "" {
+		fmt.Printf("%s", errstr)
+	}
+	return out
 }
 
 func CreateCaasp4(action string) (string, string) {
@@ -122,37 +138,38 @@ func CreateCaasp4(action string) (string, string) {
 func JoinWorkers(tf *TFOutput, b map[string]Node) (string, string){
 	var out, errstr string
 	for index, k := range tf.IP_Workers.Value {
-		fmt.Println(tf.IP_Workers.Value)
+		fmt.Println(k)
 		time.Sleep(10*time.Second)
 		k8sname := fmt.Sprintf("worker-pimp-comrade-0%v", index)
-		cmd := exec.Command("skuba", "node", "join", "--role", "worker", "--user", "sles", "--sudo", "--target", k, k8sname)
 		node := b[k]
 		node.K8sName = k8sname
 		b[k] = node
-		cmd.Dir = filepath.Join(vmwaretfdir, clustername)
+		cmd := exec.Command("skuba", "node", "join", "--role", "worker", "--user", "sles", "--sudo", "--target", k, k8sname)
+		cmd.Dir = myclusterdir
 		cmd.Env = ENV2
-		out, errstr = NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
+		out, errstr = NiceBuffRunner(cmd, myclusterdir)
+		/*
 		if errstr != "%!s(<nil>)" && errstr != "" {
 			log.Printf("Error while running \"skuba join worker command\":  %s", errstr)
 			return out, errstr
 		}
+		*/
 	}
 	return out, errstr
 }
 
 func DeployCaasp4(tf *TFOutput) (string, string) {
 	//---------------Deploying With Skuba-----------------------
-	//var out, errstr string
+	var out, errstr string
 	NodeOSExporter(tf)
 	b := ClusterCheckBuilder(tf, "setup")
 	cmd := exec.Command("skuba", "cluster", "init", "--control-plane", tf.IP_Load_Balancer.Value[0], clustername)
 	cmd.Env = ENV2
-	out, errstr := NiceBuffRunner(cmd, vmwaretfdir)
+	out, errstr = NiceBuffRunner(cmd, vmwaretfdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
-		log.Printf("Error while running \"skuba init command\":  %s", errstr)
+		//log.Printf("Error while running \"skuba init command\":  %s", errstr)
 		return out, errstr
 	}	
-	//fmt.Println(b)
 	log.Printf("Successfully initiated the cluster load balancer: %s ...\n", tf.IP_Load_Balancer.Value[0])
 	time.Sleep(20 * time.Second)
 	for index, k := range tf.IP_Masters.Value {
@@ -164,14 +181,27 @@ func DeployCaasp4(tf *TFOutput) (string, string) {
 		cmd.Dir = filepath.Join(vmwaretfdir, clustername)
 		fmt.Println(cmd.Dir)
 		cmd.Env = ENV2
-		out, errstr := NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
+		out, errstr = NiceBuffRunner(cmd, filepath.Join(vmwaretfdir, clustername))
+		/*
 		if errstr != "%!s(<nil>)" && errstr != "" {
-			//log.Printf("Error while running \"skuba node bootstrap %s\":  %s", k8sname, errstr)
-			return out, errstr
+			log.Printf("Error while running \"skuba node bootstrap %s\":  %s", k8sname, errstr)
+			return out, errstr	
 		}
-		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
+		*/
+		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)	
 	}
 	JoinWorkers(tf, b)
+
+	//---------copying the admin conf to .kube/conf ...
+	sysos, _ := CheckOS()
+	if sysos == "mac" {
+		err := exec.Command("cp", filepath.Join(myclusterdir, "admin.conf"), filepath.Join(MacHomedir, ".kube/config")).Run()
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "Error while copying admin.conf: %s\n", err)
+		} else {
+			log.Println("Successfully copied admin.conf to .kube folder...")
+		}
+	}
  return out, errstr
 }
 
