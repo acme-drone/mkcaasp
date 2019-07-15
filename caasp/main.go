@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"path/filepath"
 )
 
 const (
@@ -91,15 +92,17 @@ var (
 	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
 	test     = flag.String("test", "", "triggers testing of the cluster (by running functions from mkaasp/tests")
 	checkstatus = flag.Bool("status", false, "triggers skuba check status")
-	version  = flag.String("v", "3", "triggers automation on CaaSPv4")	
+	version  = flag.String("v", "3", "triggers automation on CaaSPv4")
+	ginkgotest = flag.Bool("ginkgo", false, "triggers ginko testing")
 	//tf = utils.TFParser()
 	Cluster *utils.CaaSPCluster
 	tf *utils.TFOutput
+	//Mkcaasproot = "/home/atighineanu/golang/src/mkcaasp"
+	MacHomedir = "/Users/alexeitighineanu"
+	Mkcaasproot = filepath.Join(MacHomedir, "go/src/mkcaasp")
 )
 
 const (
-	//Mkcaasproot = "/home/atighineanu/golang/src/mkcaasp"
-	Mkcaasproot = "/Users/alexeitighineanu/go/src/mkcaasp"
 	caaspDir    = "caasp-openstack-terraform"
 	sesDir      = "ses-openstack-terraform"
 	output      = "terraform output -json"
@@ -108,18 +111,28 @@ const (
 func main() {
 	flag.Parse()
 	if *version == "4" {
-		fmt.Println(utils.Mkcaasproot, Mkcaasproot)
+		fmt.Println(utils.MacHomedir, MacHomedir)	
+		fmt.Println(utils.Mkcaasproot, Mkcaasproot)	
+		tf = utils.TFParser()
 		if *caasp {
 			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
-				utils.CreateCaasp4(*action)
-				tf = utils.TFParser()
+				utils.CreateCaasp4(*action)			
 				if *action != "apply" && *action != "destroy" {
 					utils.NodeOSExporter(tf)
 				}
 				if *action == "apply" {
-					utils.DeployCaasp4(tf)
+					if *ginkgotest{
+						utils.NodeOSExporter(tf)
+						utils.RunGinkgo()
+					} else {
+						utils.DeployCaasp4(tf)
+					}			
 				}				
 			}
+		}
+		if *ginkgotest{
+			utils.NodeOSExporter(tf)
+			utils.RunGinkgo()
 		}
 		if *addnodes != "" {
 			tf = utils.TFParser()
