@@ -36,6 +36,8 @@ type TFTag struct {
 type SkubaCluster struct {
 	ClusterName string
 	Diagnosis map[string]Node
+	TF *TFOutput
+	Testdir string
 }
 
 type Node struct {
