@@ -5,6 +5,7 @@ type MKCaaSPCfg struct {
 	Deploy    string  `json: "deploy"`
 	Vmware    *VMWare `json: "vmware"`
 	Skubaroot string  `json: "skubaroot"`
+	ClusterName string `json: "clustername"`
 }
 
 type VMWare struct {
@@ -30,7 +31,12 @@ type TFTag struct {
 	Value     []string `json: value`
 }
 
-type ClusterCheck map[string]Node
+//type ClusterCheck map[string]Node
+
+type SkubaCluster struct {
+	ClusterName string
+	Diagnosis map[string]Node
+}
 
 type Node struct {
 	IP         string
