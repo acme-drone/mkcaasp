@@ -18,14 +18,23 @@ func CheckOS() (string, error){
 	tmp := fmt.Sprintf("%s", string(out))
 	if strings.Contains(strings.ToLower(tmp), "darwin") || strings.Contains(strings.ToLower(tmp), "mac") {
 		sysos = "mac"
-	}
+	} else {
+		out, err = exec.Command("cat", "/etc/os-release").CombinedOutput()
+		if err != nil{
+			fmt.Printf("utils.CheckOS -> Error while running uname -a")
+			return "", err
+		}
+		if strings.Contains(strings.ToLower(tmp), "suse") {
+			sysos = "suse"
+		}
+	}	
 	return sysos, err
 }
 
-func CheckSkuba() (string, string){
+func (cluster *SkubaCluster) CheckSkuba() (string, string){
 	cmd := exec.Command("skuba", "cluster", "status")
-	cmd.Dir = myclusterdir
-	out, errstr := NiceBuffRunner(cmd, myclusterdir)
+	cmd.Dir = Myclusterdir
+	out, errstr := NiceBuffRunner(cmd, Myclusterdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
 		log.Printf("Error while running \"skuba cluster status\":  %s", errstr)
 	}
