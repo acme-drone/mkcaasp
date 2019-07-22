@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"mkcaasp/tests"
+	"mkcaasp/tests/healthchecksV3"
 	"mkcaasp/utils"
 	"os"
 	"strings"
@@ -66,6 +66,7 @@ var (
 	libvirt       = flag.String("tflibvirt", "", "switch for terraform-libvirt option")
 	openstack     = flag.String("auth", "openstack.json", "name of the json file containing openstack variables")
 	action        = flag.String("action", "apply", "terraform action to run, example: apply, destroy")
+	bootstrap	  = flag.Bool("bootstrap", false, "triggers bootstrap with Skuba")
 	regcode       = flag.String("regcode", "NOTVALID", "SCC-key")
 	caasp         = flag.Bool("createcaasp", false, "enables/disables caasp terraform openstack setup")
 	ses           = flag.Bool("createses", false, "enables/disables ses terraform openstack setup")
@@ -90,16 +91,17 @@ var (
 	packupd  = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
 	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
 	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
-	test     = flag.String("test", "", "triggers testing of the cluster (by running functions from mkaasp/tests")
+	test     = flag.String("test", "", "triggers testing of the cluster (by running tests depending on scenario folders)")
 	checkstatus = flag.Bool("status", false, "triggers skuba check status")
 	version  = flag.String("v", "3", "triggers automation on CaaSPv4")
 	ginkgotest = flag.Bool("ginkgo", false, "triggers ginko testing")
 	//tf = utils.TFParser()
 	Cluster *utils.CaaSPCluster
 	tf *utils.TFOutput
-	//Mkcaasproot = "/home/atighineanu/golang/src/mkcaasp"
+	Mkcaasproot = ""
 	MacHomedir = "/Users/alexeitighineanu"
-	Mkcaasproot = filepath.Join(MacHomedir, "go/src/mkcaasp")
+	SUSEHomedir = "/home/atighineanu"
+	
 )
 
 const (
@@ -111,36 +113,60 @@ const (
 func main() {
 	flag.Parse()
 	if *version == "4" {
-		fmt.Println(utils.MacHomedir, MacHomedir)	
-		fmt.Println(utils.Mkcaasproot, Mkcaasproot)	
-		tf = utils.TFParser()
+		var cluster utils.SkubaCluster
+		sysos, err := utils.CheckOS()
+		if err != nil {
+			log.Printf("%s; Error running CheckOS: %s", os.Stdout, err)
+		}
+		if sysos == "mac" {
+			Mkcaasproot = filepath.Join(MacHomedir, "go/src/mkcaasp")
+			utils.Homedir = MacHomedir
+		}
+		if sysos == "suse" {
+			Mkcaasproot = filepath.Join(SUSEHomedir, "go/src/mkcaasp")
+			utils.Homedir = SUSEHomedir
+		}
+		utils.Config, err = utils.CaaSP4CFG(Mkcaasproot)
+		if err != nil {
+			fmt.Printf("Error while runnign CaaaSP4CFG: %s\n", err)
+		}
+		utils.Skubaroot = utils.Config.Skubaroot
+		utils.Vmwaretfdir = filepath.Join(utils.Config.Skubaroot, "ci/infra/vmware")
+		utils.Testworkdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios/scenario1")
+		cluster.ClusterName = "imba_cluster"
+		utils.Myclusterdir = filepath.Join(utils.Testworkdir, cluster.ClusterName)
+		cluster.TF, err = utils.TFParser()
+		if err != nil {
+			log.Printf("%s; Error running Terraform: %s", os.Stdout, err)
+		}
+		if *test != "" {
+			cluster.Testdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios", *test)
+		}
 		if *caasp {
-			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
-				utils.CreateCaasp4(*action)			
-				if *action != "apply" && *action != "destroy" {
-					utils.NodeOSExporter(tf)
-				}
-				if *action == "apply" {
-					if *ginkgotest{
-						utils.NodeOSExporter(tf)
-						utils.RunGinkgo()
-					} else {
-						utils.DeployCaasp4(tf)
-					}			
-				}				
+			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {					
+				utils.VMWareexporter()			
+				utils.CreateCaasp4(*action)	
 			}
 		}
+		if *bootstrap{
+			cluster.RefreshSkubaCluster()
+			cluster.EnvOSExporter()		
+			cluster.SkubaInit()
+			cluster.BootstrapMaster("sequential")
+			cluster.JoinWorkers()
+			//cluster.RunGinkgo()
+		}
 		if *ginkgotest{
-			utils.NodeOSExporter(tf)
-			utils.RunGinkgo()
+			cluster.RefreshSkubaCluster()
+			cluster.EnvOSExporter()		
+			cluster.SkubaInit()
+			cluster.RunGinkgo()
 		}
 		if *addnodes != "" {
-			tf = utils.TFParser()
-			b := utils.ClusterCheckBuilder(tf, "setup")
-			utils.JoinWorkers(tf, b)
+			cluster.JoinWorkers()
 		}
 		if *checkstatus {
-			utils.CheckSkuba()
+			cluster.CheckSkuba()
 		}
 	//---------End of Version 4 ----------------------	
 	} else {
@@ -297,7 +323,7 @@ func main() {
 		if *test != "" {
 			a := utils.CAASPOutReturner(*openstack, *home, caaspDir)
 			if *test == "health" {
-				tests.HealthChecks(a, *home, caaspDir)
+				healthchecksV3.HealthChecks(a, *home, caaspDir)
 			}
 		}
 	}
