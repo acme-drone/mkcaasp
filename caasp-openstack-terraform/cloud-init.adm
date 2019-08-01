@@ -1,0 +1,25 @@
+#cloud-config
+
+# set locale
+locale: en_US.UTF-8
+
+# set timezone
+timezone: Europe/Warsaw
+hostname: caasp-admin
+#fqdn: caasp-admin.qa.suse.de
+
+# set as admin node
+suse_caasp:
+  role: admin
+
+# setup and enable ntp
+ntp:
+  servers:
+    - ntp1.suse.de
+    - ntp2.suse.de
+    - ntp3.suse.de
+
+runcmd:
+  - /usr/bin/systemctl enable --now ntpd
+
+final_message: "The system is finally up, after $UPTIME seconds"

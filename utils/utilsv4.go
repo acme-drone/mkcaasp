@@ -6,31 +6,37 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"strings"
-	"math/rand"
 )
 
 var (
-	Homedir string
-	Mkcaasproot string
-	Config *MKCaaSPCfg //CaaSP4CFG(Mkcaasproot)
-	err error
-	Skubaroot   string 
-	Vmwaretfdir  string
-	Myclusterdir string 
-	Testworkdir  string
-	ENV2         = os.Environ()
+	Homedir        string
+	Mkcaasproot    string
+	Config         *MKCaaSPCfg //CaaSP4CFG(Mkcaasproot)
+	err            error
+	Skubaroot      string
+	Vmwaretfdir    string
+	Openstacktfdir string
+	Myclusterdir   string
+	Testworkdir    string
+	ENV2           = os.Environ()
+	Workdir        string
 	//workdir      = filepath.Join(skubaroot, "test/lib/prototyping")
 )
 
-
 //---------------------------INITIATING OS.ENV, VARIABLES, TESTCLUSTER DATA STRUCTURE-----------------------
+
+func OpenstackExporter() {
+	tmpenv, _ := SetOSEnv(filepath.Join(Mkcaasproot, "openstack.json"))
+	ENV2 = append(ENV2, tmpenv...)
+}
 
 func VMWareexporter() {
 	a := []string{
@@ -67,8 +73,16 @@ func CaaSP4CFG(mkcaasproot string) (*MKCaaSPCfg, error) {
 
 func TFParser() (*TFOutput, error) {
 	var a *TFOutput
+	/*	cmd := exec.Command("terraform", "init")
+		out, errstr := NiceBuffRunner(cmd, Workdir)
+		if errstr != "%!s(<nil>)" && errstr != "" {
+			return nil, err
+			log.Printf("Error while running \"terraform output -json\":  %s", errstr)
+		}
+	*/
 	cmd := exec.Command("terraform", "output", "-json")
-	out, errstr := NiceBuffRunner(cmd, Vmwaretfdir)
+	cmd.Env = ENV2
+	out, errstr := NiceBuffRunner(cmd, Workdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
 		return nil, err
 		log.Printf("Error while running \"terraform output -json\":  %s", errstr)
@@ -99,7 +113,7 @@ func (cluster *SkubaCluster) EnvOSExporter() []string {
 	return ENV2
 }
 
-func (cluster *SkubaCluster)RefreshSkubaCluster() {
+func (cluster *SkubaCluster) RefreshSkubaCluster() {
 	cluster.ClusterName = Config.ClusterName
 	cluster.TF, err = TFParser()
 	if err != nil {
@@ -110,11 +124,11 @@ func (cluster *SkubaCluster)RefreshSkubaCluster() {
 
 //------------------------------------------------ EXECUTING ACTUAL CHANGES, TF-DEPLOY, ADDNODE, RUN TEST, SKUBA -COMMAND---------------
 
-func (cluster *SkubaCluster)RunGinkgo() (string, string) {
+func (cluster *SkubaCluster) RunGinkgo() (string, string) {
 	//cmd := exec.Command("go", "test")
-	cmd := exec.Command("ginkgo", /*"-mod=vendor",*/ "-v", "-r", Testworkdir)
+	cmd := exec.Command("ginkgo" /*"-mod=vendor",*/, "-v", "-r", Testworkdir)
 	cmd.Env = ENV2
-	log.Println("Running ginko test now...")	
+	log.Println("Running ginko test now...")
 	out, errstr := NiceBuffRunner(cmd, Testworkdir)
 	if errstr != "" {
 		fmt.Printf("%s", errstr)
@@ -133,7 +147,7 @@ func CreateCaasp4(action string) (string, string) {
 		suffix = "-auto-approve"
 		_, err := exec.Command("rm", "-R", Myclusterdir).CombinedOutput()
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "Error removing the %s folder...%v", Myclusterdir, err )
+			fmt.Fprintf(os.Stdout, "Error removing the %s folder...%v", Myclusterdir, err)
 		}
 	}
 	if suffix != "" {
@@ -142,7 +156,7 @@ func CreateCaasp4(action string) (string, string) {
 		cmd = exec.Command("terraform", action)
 	}
 	cmd.Env = ENV2
-	out, errstr := NiceBuffRunner(cmd, Vmwaretfdir)
+	out, errstr := NiceBuffRunner(cmd, Workdir)
 	if errstr != "%!s(<nil>)" && errstr != "" {
 		log.Printf("Error while running \"terraform command\":  %s", errstr)
 	}
@@ -153,11 +167,8 @@ func CreateCaasp4(action string) (string, string) {
 	return out, errstr
 }
 
-
-
-
 //------------------Initializing CaaSP4 Cluster with Skuba-----------------
-func (cluster *SkubaCluster)SkubaInit() (string, string){
+func (cluster *SkubaCluster) SkubaInit() (string, string) {
 	var out, errstr string
 	cmd := exec.Command("skuba", "cluster", "init", "--control-plane", cluster.TF.IP_Load_Balancer.Value[0], cluster.ClusterName)
 	cmd.Env = ENV2
@@ -165,7 +176,7 @@ func (cluster *SkubaCluster)SkubaInit() (string, string){
 		out, errstr := NiceBuffRunner(cmd, Testworkdir)
 		if errstr != "%!s(<nil>)" && errstr != "" {
 			return out, errstr
-		}	
+		}
 		log.Printf("Successfully initiated the cluster load balancer: %s ...\n", cluster.TF.IP_Load_Balancer.Value[0])
 		time.Sleep(20 * time.Second)
 	}
@@ -173,7 +184,7 @@ func (cluster *SkubaCluster)SkubaInit() (string, string){
 }
 
 //------------------Bootstrapping Masters on CaaSP4 with Skuba---------------
-func (cluster *SkubaCluster)BootstrapMaster(mode string) (string, string) {
+func (cluster *SkubaCluster) BootstrapMaster(mode string) (string, string) {
 	var out, errstr string
 	if strings.Contains(mode, "selective:") {
 		k8sname := fmt.Sprintf("master-pimp-general-0%v", rand.Intn(1000))
@@ -186,31 +197,31 @@ func (cluster *SkubaCluster)BootstrapMaster(mode string) (string, string) {
 		cmd.Env = ENV2
 		_, errstr := NiceBuffRunner(cmd, filepath.Join(Testworkdir, cluster.ClusterName))
 		if errstr != "%!s(<nil>)" && errstr != "" {
-			return out, errstr	
+			return out, errstr
 		}
 		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, ip)
 	}
-	if mode == "sequential"{
-	for index, k := range cluster.TF.IP_Masters.Value {
-		k8sname := fmt.Sprintf("master-pimp-general-0%v", index)
-		cmd := exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
-		node := cluster.Diagnosis[k]
-		node.K8sName = k8sname
-		cluster.Diagnosis[k] = node
-		cmd.Dir = filepath.Join(Testworkdir, cluster.ClusterName)
-		cmd.Env = ENV2
-		_, errstr := NiceBuffRunner(cmd, filepath.Join(Testworkdir, cluster.ClusterName))
-		if errstr != "%!s(<nil>)" && errstr != "" {
-			return out, errstr	
+	if mode == "sequential" {
+		for index, k := range cluster.TF.IP_Masters.Value {
+			k8sname := fmt.Sprintf("master-pimp-general-0%v", index)
+			cmd := exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+			node := cluster.Diagnosis[k]
+			node.K8sName = k8sname
+			cluster.Diagnosis[k] = node
+			cmd.Dir = filepath.Join(Testworkdir, cluster.ClusterName)
+			cmd.Env = ENV2
+			_, errstr := NiceBuffRunner(cmd, filepath.Join(Testworkdir, cluster.ClusterName))
+			if errstr != "%!s(<nil>)" && errstr != "" {
+				return out, errstr
+			}
+			log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
 		}
-		log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)	
 	}
-}
 	return out, errstr
 }
 
 //------------Joining workers with Skuba-------------------------
-func (cluster *SkubaCluster)JoinWorkers() (string, string){
+func (cluster *SkubaCluster) JoinWorkers() (string, string) {
 	var out, errstr string
 	for index, k := range cluster.TF.IP_Workers.Value {
 		fmt.Println(k)
@@ -222,18 +233,18 @@ func (cluster *SkubaCluster)JoinWorkers() (string, string){
 		cmd.Dir = Myclusterdir
 		cmd.Env = ENV2
 		out, errstr = NiceBuffRunner(cmd, Myclusterdir)
-	/*	if errstr != "%!s(<nil>)" && errstr != "" && errstr != " " {
-			fmt.Println(errstr)
-		return "", errstr
-		}*/
+		/*	if errstr != "%!s(<nil>)" && errstr != "" && errstr != " " {
+				fmt.Println(errstr)
+			return "", errstr
+			}*/
 	}
-return out, errstr
+	return out, errstr
 }
 
-	//---------copying the admin conf to .kube/conf ...
+//---------copying the admin conf to .kube/conf ...
 func (cluster *SkubaCluster) CopyAdminConf() (string, string) {
 	out, err := exec.Command("cp", filepath.Join(Myclusterdir, "admin.conf"), filepath.Join(Homedir, ".kube/config")).CombinedOutput()
- return  fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s",err)
+	return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 }
 
 func (node *Node) SSHCmd(workdir string, command []string) *exec.Cmd {

@@ -1,5 +1,5 @@
 {
-    "platform": "vmware",
+    "platform": "openstack",
     "deploy": "terraform",
     "vmware": {
         "GOVC_URL": "vmwareURL",
@@ -10,5 +10,7 @@
         "VSPHERE_USER":  "username@vmwareURL",
         "VSPHERE_PASSWORD": "password",
         "VSPHERE_ALLOW_UNVERIFIED_SSL": true
-    }
+    },
+    "skubaroot": "/home/atighineanu/golang/src/github.com/SUSE/skuba",
+    "clustername": "imba-cluster"
 }

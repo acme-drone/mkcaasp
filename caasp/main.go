@@ -8,9 +8,9 @@ import (
 	"mkcaasp/tests/healthchecksV3"
 	"mkcaasp/utils"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
-	"path/filepath"
 )
 
 const (
@@ -66,7 +66,7 @@ var (
 	libvirt       = flag.String("tflibvirt", "", "switch for terraform-libvirt option")
 	openstack     = flag.String("auth", "openstack.json", "name of the json file containing openstack variables")
 	action        = flag.String("action", "apply", "terraform action to run, example: apply, destroy")
-	bootstrap	  = flag.Bool("bootstrap", false, "triggers bootstrap with Skuba")
+	bootstrap     = flag.Bool("bootstrap", false, "triggers bootstrap with Skuba")
 	regcode       = flag.String("regcode", "NOTVALID", "SCC-key")
 	caasp         = flag.Bool("createcaasp", false, "enables/disables caasp terraform openstack setup")
 	ses           = flag.Bool("createses", false, "enables/disables ses terraform openstack setup")
@@ -81,33 +81,32 @@ var (
 	home = flag.String("repo", "automation", "kubic automation repo location")
 	//pass     = flag.String("pass", "password", "the password for cloud to be hashed (and be exported into openstack.json)")
 	//hash     = flag.String("key", "default", "chose which string is going to be your hash key")
-	
-	cmd      = flag.String("cmd", "", "the orchestration command to run from admin using salt-master container")
-	refresh  = flag.Bool("ref", false, "refreshing the salt grains from admin")
-	disable  = flag.Bool("dis", false, "disabling transactional-update from admin")
-	register = flag.Bool("reg", false, "registering the cluster to SCC")
-	addrepo  = flag.String("ar", "", "adding a repository (based on an URL) to the cluster")
-	sysupd   = flag.Bool("sysupd", false, "triggers transactional-update cleanup dup salt")
-	packupd  = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
-	new      = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
-	uiupd    = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
-	test     = flag.String("test", "", "triggers testing of the cluster (by running tests depending on scenario folders)")
+
+	cmd         = flag.String("cmd", "", "the orchestration command to run from admin using salt-master container")
+	refresh     = flag.Bool("ref", false, "refreshing the salt grains from admin")
+	disable     = flag.Bool("dis", false, "disabling transactional-update from admin")
+	register    = flag.Bool("reg", false, "registering the cluster to SCC")
+	addrepo     = flag.String("ar", "", "adding a repository (based on an URL) to the cluster")
+	sysupd      = flag.Bool("sysupd", false, "triggers transactional-update cleanup dup salt")
+	packupd     = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
+	new         = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
+	uiupd       = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
+	test        = flag.String("test", "", "triggers testing of the cluster (by running tests depending on scenario folders)")
 	checkstatus = flag.Bool("status", false, "triggers skuba check status")
-	version  = flag.String("v", "3", "triggers automation on CaaSPv4")
-	ginkgotest = flag.Bool("ginkgo", false, "triggers ginko testing")
+	version     = flag.String("v", "3", "triggers automation on CaaSPv4")
+	ginkgotest  = flag.Bool("ginkgo", false, "triggers ginko testing")
 	//tf = utils.TFParser()
-	Cluster *utils.CaaSPCluster
-	tf *utils.TFOutput
+	Cluster     *utils.CaaSPCluster
+	tf          *utils.TFOutput
 	Mkcaasproot = ""
-	MacHomedir = "/Users/alexeitighineanu"
+	MacHomedir  = "/Users/alexeitighineanu"
 	SUSEHomedir = "/home/atighineanu"
-	
 )
 
 const (
-	caaspDir    = "caasp-openstack-terraform"
-	sesDir      = "ses-openstack-terraform"
-	output      = "terraform output -json"
+	caaspDir = "caasp-openstack-terraform"
+	sesDir   = "ses-openstack-terraform"
+	output   = "terraform output -json"
 )
 
 func main() {
@@ -132,10 +131,16 @@ func main() {
 		}
 		utils.Skubaroot = utils.Config.Skubaroot
 		utils.Vmwaretfdir = filepath.Join(utils.Config.Skubaroot, "ci/infra/vmware")
+		utils.Openstacktfdir = filepath.Join(utils.Config.Skubaroot, "ci/infra/openstack")
 		utils.Testworkdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios/scenario1")
 		cluster.ClusterName = "imba_cluster"
 		utils.Myclusterdir = filepath.Join(utils.Testworkdir, cluster.ClusterName)
-		cluster.TF, err = utils.TFParser()
+		if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
+			utils.Workdir = utils.Vmwaretfdir
+		}
+		if utils.Config.Platform == "openstack" && utils.Config.Deploy == "terraform" {
+			utils.Workdir = utils.Openstacktfdir
+		}
 		if err != nil {
 			log.Printf("%s; Error running Terraform: %s", os.Stdout, err)
 		}
@@ -143,22 +148,26 @@ func main() {
 			cluster.Testdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios", *test)
 		}
 		if *caasp {
-			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {					
-				utils.VMWareexporter()			
-				utils.CreateCaasp4(*action)	
+			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
+				utils.VMWareexporter()
+				utils.CreateCaasp4(*action)
+			}
+			if utils.Config.Platform == "openstack" && utils.Config.Deploy == "terraform" {
+				utils.OpenstackExporter()
+				utils.CreateCaasp4(*action)
 			}
 		}
-		if *bootstrap{
+		if *bootstrap {
 			cluster.RefreshSkubaCluster()
-			cluster.EnvOSExporter()		
+			cluster.EnvOSExporter()
 			cluster.SkubaInit()
 			cluster.BootstrapMaster("sequential")
 			cluster.JoinWorkers()
 			//cluster.RunGinkgo()
 		}
-		if *ginkgotest{
+		if *ginkgotest {
 			cluster.RefreshSkubaCluster()
-			cluster.EnvOSExporter()		
+			cluster.EnvOSExporter()
 			cluster.SkubaInit()
 			cluster.RunGinkgo()
 		}
@@ -168,7 +177,7 @@ func main() {
 		if *checkstatus {
 			cluster.CheckSkuba()
 		}
-	//---------End of Version 4 ----------------------	
+		//---------End of Version 4 ----------------------
 	} else {
 		if *howto {
 			fmt.Fprintf(os.Stdout, "%v\n", howtouse)
