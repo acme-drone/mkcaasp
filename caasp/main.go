@@ -121,7 +121,6 @@ func main() {
 			utils.Homedir = MacHomedir
 		}
 		Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos)
-		fmt.Printf("%s   %s", Mkcaasproot, utils.Homedir)
 		utils.Config, err = utils.CaaSP4CFG(Mkcaasproot)
 		if err != nil {
 			fmt.Printf("Error while runnign CaaaSP4CFG: %s\n", err)
@@ -157,10 +156,10 @@ func main() {
 		if *bootstrap {
 			cluster.RefreshSkubaCluster()
 			cluster.EnvOSExporter()
-			//cluster.SkubaInit()
-			//cluster.BootstrapMaster("sequential")
-			//cluster.JoinWorkers()
-			//cluster.RunGinkgo()
+			cluster.SkubaInit()
+			cluster.BootstrapMaster("sequential")
+			cluster.JoinWorkers()
+			cluster.RunGinkgo()
 		}
 		if *ginkgotest {
 			cluster.RefreshSkubaCluster()
