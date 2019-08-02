@@ -5,13 +5,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
-func CheckOS() (string, error){
+func CheckOS() (string, error) {
 	var sysos string
 	out, err := exec.Command("uname", "-a").CombinedOutput()
-	if err != nil{
+	if err != nil {
 		fmt.Printf("utils.CheckOS -> Error while running uname -a")
 		return "", err
 	}
@@ -20,18 +21,47 @@ func CheckOS() (string, error){
 		sysos = "mac"
 	} else {
 		out, err = exec.Command("cat", "/etc/os-release").CombinedOutput()
-		if err != nil{
+		if err != nil {
 			fmt.Printf("utils.CheckOS -> Error while running uname -a")
 			return "", err
 		}
-		if strings.Contains(strings.ToLower(tmp), "suse") {
+		if strings.Contains(strings.ToLower(fmt.Sprintf("%s", string(out))), "suse") {
 			sysos = "suse"
 		}
-	}	
+	}
 	return sysos, err
 }
 
-func (cluster *SkubaCluster) CheckSkuba() (string, string){
+func FolderFinder(sysos string) (string, string) {
+	var mkcaasproot, homefolder string
+	switch sysos {
+	case "suse":
+		cmd := []string{"whoami"}
+		out, err := exec.Command(cmd[0]).CombinedOutput()
+		if err != nil {
+			log.Printf("Error occured: %s", err)
+		}
+		//fmt.Println(fmt.Sprintf("%q", string(out)))
+		username := strings.Replace(fmt.Sprintf("%s", string(out)), "\n", "", 1)
+		homefolder = filepath.Join("/home", username)
+		folderslice := []string{"go/src/mkcaasp", "work/src/mkcaasp", "golang/src/mkcaasp"}
+		for _, k := range folderslice {
+			cmd = []string{"ls", "-alh", filepath.Join(homefolder, k)}
+			out, err = exec.Command(cmd[0], cmd[1:]...).CombinedOutput()
+			if err != nil {
+				log.Printf("A foreseen little error occured (finding folders): %s", err)
+			}
+			if !strings.Contains(fmt.Sprintf("%s", string(out)), "No such file") {
+				mkcaasproot = filepath.Join(homefolder, k)
+				break
+			}
+		}
+
+	}
+	return mkcaasproot, homefolder
+}
+
+func (cluster *SkubaCluster) CheckSkuba() (string, string) {
 	cmd := exec.Command("skuba", "cluster", "status")
 	cmd.Dir = Myclusterdir
 	out, errstr := NiceBuffRunner(cmd, Myclusterdir)
@@ -161,60 +191,120 @@ func CheckSystemd(node Node) Node {
 	return node
 }
 
-func ClusterCheckBuilder(a *TFOutput, mode string) map[string]Node {
+func (cluster *SkubaCluster) ClusterCheckBuilder(mode string) map[string]Node {
 	b := make(map[string]Node)
 	var node Node
 	node.Username = "sles" //to be improved if different user for different roles...
 	if mode == "checks" {
-		for _, k := range a.IP_Load_Balancer.Value {
+		//-------setting load balancer
+		switch Config.Platform {
+		case "openstack":
+			k := cluster.TF_ostack.IP_Load_Balancer.Value
 			node.IP = k
 			node := CheckIPSSH(node)
 			node.Role = "Load_Balancer"
 			node = CheckNodename(node, mode)
 			node = CheckSystemd(node)
 			b[k] = node
-		}
-		for _, k := range a.IP_Masters.Value {
-			node.IP = k
-			node := CheckIPSSH(node)
-			node.Role = "Master"
-			node = CheckNodename(node, mode)
-			node = CheckSystemd(node)
-			b[k] = node
-		}
-		for _, k := range a.IP_Workers.Value {
-			node.IP = k
-			node := CheckIPSSH(node)
-			node.Role = "Worker"
-			node = CheckNodename(node, mode)
-			node = CheckSystemd(node)
-			b[k] = node
+			//---------setting masters------------
+			for _, k := range cluster.TF_ostack.IP_Masters.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Master"
+				node = CheckNodename(node, mode)
+				node = CheckSystemd(node)
+				b[k] = node
+			}
+			//---------setting workers--------------
+			for _, k := range cluster.TF_ostack.IP_Workers.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Worker"
+				node = CheckNodename(node, mode)
+				node = CheckSystemd(node)
+				b[k] = node
+			}
+
+		case "vmware":
+			for _, k := range cluster.TF_vmware.IP_Load_Balancer.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Load_Balancer"
+				node = CheckNodename(node, mode)
+				node = CheckSystemd(node)
+				b[k] = node
+			}
+			//---------setting masters------------
+			for _, k := range cluster.TF_vmware.IP_Masters.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Master"
+				node = CheckNodename(node, mode)
+				node = CheckSystemd(node)
+				b[k] = node
+			}
+			//---------setting workers--------------
+			for _, k := range cluster.TF_vmware.IP_Workers.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Worker"
+				node = CheckNodename(node, mode)
+				node = CheckSystemd(node)
+				b[k] = node
+			}
 		}
 		for key, value := range b {
 			fmt.Printf("b[%s] = {Role:%s;  %s  %s  %s  %s}\n", key, value.Role, value.K8sName, value.IP, value.NodeName, value.Systemd.AllFine)
 		}
 	}
 	if mode == "setup" {
-		for _, k := range a.IP_Load_Balancer.Value {
+		switch Config.Platform {
+		case "openstack":
+			k := cluster.TF_ostack.IP_Load_Balancer.Value
 			node.IP = k
 			node := CheckIPSSH(node)
 			node.Role = "Load_Balancer"
 			node = CheckNodename(node, mode)
 			b[k] = node
-		}
-		for _, k := range a.IP_Masters.Value {
-			node.IP = k
-			node := CheckIPSSH(node)
-			node.Role = "Master"
-			node = CheckNodename(node, mode)
-			b[k] = node
-		}
-		for _, k := range a.IP_Workers.Value {
-			node.IP = k
-			node := CheckIPSSH(node)
-			node.Role = "Worker"
-			node = CheckNodename(node, mode)
-			b[k] = node
+			//------------init masers---------------
+			for _, k := range cluster.TF_ostack.IP_Masters.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Master"
+				node = CheckNodename(node, mode)
+				b[k] = node
+			}
+			//-------------init workers-------------
+			for _, k := range cluster.TF_ostack.IP_Workers.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Worker"
+				node = CheckNodename(node, mode)
+				b[k] = node
+			}
+		case "vmware":
+			for _, k := range cluster.TF_vmware.IP_Load_Balancer.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Load_Balancer"
+				node = CheckNodename(node, mode)
+				b[k] = node
+			}
+			for _, k := range cluster.TF_vmware.IP_Masters.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Master"
+				node = CheckNodename(node, mode)
+				b[k] = node
+			}
+			//-------------init workers-------------
+			for _, k := range cluster.TF_vmware.IP_Workers.Value {
+				node.IP = k
+				node := CheckIPSSH(node)
+				node.Role = "Worker"
+				node = CheckNodename(node, mode)
+				b[k] = node
+			}
 		}
 	}
 	return b
