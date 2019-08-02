@@ -159,7 +159,7 @@ func main() {
 			cluster.SkubaInit()
 			cluster.BootstrapMaster("sequential")
 			cluster.JoinWorkers()
-			cluster.RunGinkgo()
+			cluster.CopyAdminConf()
 		}
 		if *ginkgotest {
 			cluster.RefreshSkubaCluster()
