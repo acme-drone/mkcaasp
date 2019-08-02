@@ -100,7 +100,6 @@ var (
 	tf          *utils.TFOutput
 	Mkcaasproot = ""
 	MacHomedir  = "/Users/alexeitighineanu"
-	SUSEHomedir = "/home/atighineanu"
 )
 
 const (
@@ -121,10 +120,8 @@ func main() {
 			Mkcaasproot = filepath.Join(MacHomedir, "go/src/mkcaasp")
 			utils.Homedir = MacHomedir
 		}
-		if sysos == "suse" {
-			Mkcaasproot = filepath.Join(SUSEHomedir, "go/src/mkcaasp")
-			utils.Homedir = SUSEHomedir
-		}
+		Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos)
+		fmt.Printf("%s   %s", Mkcaasproot, utils.Homedir)
 		utils.Config, err = utils.CaaSP4CFG(Mkcaasproot)
 		if err != nil {
 			fmt.Printf("Error while runnign CaaaSP4CFG: %s\n", err)
@@ -133,7 +130,7 @@ func main() {
 		utils.Vmwaretfdir = filepath.Join(utils.Config.Skubaroot, "ci/infra/vmware")
 		utils.Openstacktfdir = filepath.Join(utils.Config.Skubaroot, "ci/infra/openstack")
 		utils.Testworkdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios/scenario1")
-		cluster.ClusterName = "imba_cluster"
+		cluster.ClusterName = "imba-cluster"
 		utils.Myclusterdir = filepath.Join(utils.Testworkdir, cluster.ClusterName)
 		if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
 			utils.Workdir = utils.Vmwaretfdir
@@ -160,9 +157,9 @@ func main() {
 		if *bootstrap {
 			cluster.RefreshSkubaCluster()
 			cluster.EnvOSExporter()
-			cluster.SkubaInit()
-			cluster.BootstrapMaster("sequential")
-			cluster.JoinWorkers()
+			//cluster.SkubaInit()
+			//cluster.BootstrapMaster("sequential")
+			//cluster.JoinWorkers()
 			//cluster.RunGinkgo()
 		}
 		if *ginkgotest {
