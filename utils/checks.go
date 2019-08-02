@@ -56,7 +56,9 @@ func FolderFinder(sysos string) (string, string) {
 				break
 			}
 		}
-
+	}
+	if mkcaasproot == "" {
+		log.Fatalf("You picked an exotic location for your goroot folder. Please, indicate in the main.go:110-140 the hardcoded value of Mkcaasproot...")
 	}
 	return mkcaasproot, homefolder
 }
