@@ -34,7 +34,8 @@ var (
 
 //---------------------------INITIATING OS.ENV, VARIABLES, TESTCLUSTER DATA STRUCTURE-----------------------
 
-func OpenstackExporter() {
+func OpenstackExporter(Mkcaasproot string) {
+	fmt.Println(filepath.Join(Mkcaasproot, "openstack.json"))
 	tmpenv, _ := SetOSEnv(filepath.Join(Mkcaasproot, "openstack.json"))
 	ENV2 = append(ENV2, tmpenv...)
 }
@@ -211,7 +212,7 @@ func (cluster *SkubaCluster) SkubaInit() (string, string) {
 		if errstr != "%!s(<nil>)" && errstr != "" {
 			return out, errstr
 		}
-		log.Printf("Successfully initiated the cluster load balancer: %s ...\n", cluster.TF_vmware.IP_Load_Balancer.Value)
+		log.Printf("Successfully initiated the cluster load balancer: %s ...\n", cluster.TF_vmware.IP_Load_Balancer.Value[0])
 		time.Sleep(20 * time.Second)
 	}
 	if Config.Deploy == "terraform" && Config.Platform == "openstack" {
@@ -219,7 +220,7 @@ func (cluster *SkubaCluster) SkubaInit() (string, string) {
 		if errstr != "%!s(<nil>)" && errstr != "" {
 			return out, errstr
 		}
-		log.Printf("Successfully initiated the cluster load balancer: %s ...\n", cluster.TF_vmware.IP_Load_Balancer.Value[0])
+		log.Printf("Successfully initiated the cluster load balancer: %s ...\n", cluster.TF_ostack.IP_Load_Balancer.Value)
 		time.Sleep(20 * time.Second)
 	}
 	return out, errstr
@@ -264,6 +265,7 @@ func (cluster *SkubaCluster) BootstrapMaster(mode string) (string, string) {
 					log.Printf("Looks like an error: %s\n", errstr)
 				}
 				log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
+				count++
 			}
 		case "vmware":
 			count := 0
