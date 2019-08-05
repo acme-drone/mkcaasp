@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"math/rand"
@@ -245,32 +246,45 @@ func (cluster *SkubaCluster) BootstrapMaster(mode string) (string, string) {
 	if mode == "sequential" {
 		switch Config.Platform {
 		case "openstack":
+			count := 0
+			var cmd *exec.Cmd
 			for index, k := range cluster.TF_ostack.IP_Masters.Value {
 				k8sname := fmt.Sprintf("master-pimp-general-0%v", index)
-				cmd := exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+				if count == 0 {
+					cmd = exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+				} else {
+					cmd = exec.Command("skuba", "node", "join", "--role", "master", "--user", "sles", "--sudo", "--target", k, k8sname)
+				}
 				node := cluster.Diagnosis[k]
 				node.K8sName = k8sname
 				cluster.Diagnosis[k] = node
 				cmd.Env = append(cmd.Env, ENV2...)
 				_, errstr := NiceBuffRunner(cmd, filepath.Join(Testworkdir, cluster.ClusterName))
 				if errstr != "%!s(<nil>)" && errstr != "" {
-					return out, errstr
+					log.Printf("Looks like an error: %s\n", errstr)
 				}
 				log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
 			}
 		case "vmware":
+			count := 0
+			var cmd *exec.Cmd
 			for index, k := range cluster.TF_vmware.IP_Masters.Value {
 				k8sname := fmt.Sprintf("master-pimp-general-0%v", index)
-				cmd := exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+				if count == 0 {
+					cmd = exec.Command("skuba", "node", "bootstrap", "--user", "sles", "--sudo", "--target", k, k8sname)
+				} else {
+					cmd = exec.Command("skuba", "node", "join", "--role", "master", "--user", "sles", "--sudo", "--target", k, k8sname)
+				}
 				node := cluster.Diagnosis[k]
 				node.K8sName = k8sname
 				cluster.Diagnosis[k] = node
 				cmd.Env = append(cmd.Env, ENV2...)
 				_, errstr := NiceBuffRunner(cmd, filepath.Join(Testworkdir, cluster.ClusterName))
 				if errstr != "%!s(<nil>)" && errstr != "" {
-					return out, errstr
+					log.Printf("Looks like an error: %s\n", errstr)
 				}
 				log.Printf("Successfully installed %s ->IP: %s in the cluster...\n", k8sname, k)
+				count++
 			}
 		}
 
@@ -292,6 +306,9 @@ func (cluster *SkubaCluster) JoinWorkers() (string, string) {
 			cmd.Dir = Myclusterdir
 			cmd.Env = append(cmd.Env, ENV2...)
 			out, errstr = NiceBuffRunner(cmd, Myclusterdir)
+			if errstr != "%!s(<nil>)" && errstr != "" && errstr != " " {
+				log.Printf("Looks like an error: %s\n", errstr)
+			}
 		}
 	case "vmware":
 		for index, k := range cluster.TF_vmware.IP_Workers.Value {
@@ -303,8 +320,7 @@ func (cluster *SkubaCluster) JoinWorkers() (string, string) {
 			cmd.Env = append(cmd.Env, ENV2...)
 			out, errstr = NiceBuffRunner(cmd, Myclusterdir)
 			if errstr != "%!s(<nil>)" && errstr != "" && errstr != " " {
-				fmt.Println(errstr)
-				return "", errstr
+				log.Printf("Looks like an error: %s\n", errstr)
 			}
 		}
 	}
@@ -315,6 +331,9 @@ func (cluster *SkubaCluster) JoinWorkers() (string, string) {
 //---------copying the admin conf to .kube/conf ...
 func (cluster *SkubaCluster) CopyAdminConf() (string, string) {
 	out, err := exec.Command("cp", filepath.Join(Myclusterdir, "admin.conf"), filepath.Join(Homedir, ".kube/config")).CombinedOutput()
+	if err != nil {
+		log.Printf("There is an error copying the admin.conf file: %s", err)
+	}
 	return fmt.Sprintf("%s", string(out)), fmt.Sprintf("%s", err)
 }
 
@@ -326,6 +345,52 @@ func (node *Node) SSHCmd(workdir string, command []string) *exec.Cmd {
 		command...,
 	)
 	return exec.Command("ssh", args...)
+}
+
+func (cluster *SkubaCluster) NodesAdderV4() {
+	//---------------Adding the new nodes to the cluster.tf file....
+	switch Config.Platform {
+	case "vmware":
+		templ, err := template.New("AddingNodesSkuba").Parse(VmwareVarsTempl)
+		if err != nil {
+			log.Fatalf("Error parsin ClusterTempl constant...%s", err)
+		}
+		var f *os.File
+		f, err = os.Create(filepath.Join(Vmwaretfdir, "terraform.tfvars"))
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: couldn't create the file...%s", err)
+		}
+		err = templ.Execute(f, cluster.Setup)
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: couldn't execute the Cluster template %s", err)
+		}
+		f.Close()
+		_, err = exec.Command("cat", filepath.Join(Vmwaretfdir, "terraform.tfvars")).CombinedOutput()
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: Couldn't execute the cat terraform.tfvars command %s", err)
+		}
+		log.Printf("That's the modified cluster config...\n Masters: %v    Workers: %v\n", cluster.Setup.MastCount, cluster.Setup.WorkCount)
+	case "openstack":
+		templ, err := template.New("AddingNodesSkuba").Parse(OpenstackVarsTempl)
+		if err != nil {
+			log.Fatalf("Error parsin ClusterTempl constant...%s", err)
+		}
+		var f *os.File
+		f, err = os.Create(filepath.Join(Openstacktfdir, "terraform.tfvars"))
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: couldn't create the file...%s", err)
+		}
+		err = templ.Execute(f, cluster.Setup)
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: couldn't execute the Cluster template %s", err)
+		}
+		f.Close()
+		_, err = exec.Command("cat", filepath.Join(Openstacktfdir, "terraform.tfvars")).CombinedOutput()
+		if err != nil {
+			log.Fatalf("utils.NodesAdder: Couldn't execute the cat terraform.tfvars command %s", err)
+		}
+		log.Printf("That's the modified cluster config...\n Masters: %v    Workers: %v\n", cluster.Setup.MastCount, cluster.Setup.WorkCount)
+	}
 }
 
 func NiceBuffRunner(cmd *exec.Cmd, workdir string) (string, string) {
