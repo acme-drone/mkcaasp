@@ -167,6 +167,10 @@ func main() {
 			cluster.SkubaInit()
 			cluster.RunGinkgo()
 		}
+		if *nodes != "" {
+			cluster.Setup.MastCount, cluster.Setup.WorkCount = utils.AppendParse(*nodes)
+			cluster.NodesAdderV4()
+		}
 		if *addnodes != "" {
 			cluster.JoinWorkers()
 		}
