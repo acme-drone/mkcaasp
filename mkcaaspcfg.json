@@ -1,16 +1,21 @@
 {
-    "platform": "openstack",
+    "platform": "vmware",
     "deploy": "terraform",
     "vmware": {
-        "GOVC_URL": "vmwareURL",
-        "GOVC_USERNAME": "username@vmwareURL",
-        "GOVC_PASSWORD": "password",
+        "GOVC_URL": "jazz.qa.prv.suse.net",
+        "GOVC_USERNAME": "YOUR_USERNAME@jazz.qa.prv.suse.net",
+        "GOVC_PASSWORD": "vmware_pass",
         "GOVC_INSECURE": 1,
-        "VSPHERE_SERVER": "vmwareURL",
-        "VSPHERE_USER":  "username@vmwareURL",
-        "VSPHERE_PASSWORD": "password",
+        "VSPHERE_SERVER": "jazz.qa.prv.suse.net",
+        "VSPHERE_USER":  "YOUR_USERNAME@jazz.qa.prv.suse.net",
+        "VSPHERE_PASSWORD": "vmware_pass",
         "VSPHERE_ALLOW_UNVERIFIED_SSL": true
     },
-    "skubaroot": "/home/atighineanu/golang/src/github.com/SUSE/skuba",
-    "clustername": "imba-cluster"
+    "skubaroot": "yout skuba root",
+    "mkcaasproot": "your mkcaasp root",
+    "clustername": "imba-cluster",
+    "setup": {
+        "MastCount": 1,
+        "WorkCount": 2
+    }
 }
