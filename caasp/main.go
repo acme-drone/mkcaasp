@@ -8,6 +8,7 @@ import (
 	"mkcaasp/tests/healthchecksV3"
 	"mkcaasp/utils"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -143,13 +144,17 @@ func main() {
 		if *test != "" {
 			cluster.Testdir = filepath.Join(Mkcaasproot, "tests/ginkgoscenarios", *test)
 		}
+		if *nodes != "" {
+			cluster.Setup.MastCount, cluster.Setup.WorkCount = utils.AppendParse(*nodes)
+			cluster.NodesAdderV4()
+		}
 		if *caasp {
 			if utils.Config.Platform == "vmware" && utils.Config.Deploy == "terraform" {
 				utils.VMWareexporter()
 				utils.CreateCaasp4(*action)
 			}
 			if utils.Config.Platform == "openstack" && utils.Config.Deploy == "terraform" {
-				utils.OpenstackExporter()
+				utils.OpenstackExporter(Mkcaasproot)
 				utils.CreateCaasp4(*action)
 			}
 		}
@@ -167,15 +172,22 @@ func main() {
 			cluster.SkubaInit()
 			cluster.RunGinkgo()
 		}
-		if *nodes != "" {
-			cluster.Setup.MastCount, cluster.Setup.WorkCount = utils.AppendParse(*nodes)
-			cluster.NodesAdderV4()
-		}
 		if *addnodes != "" {
 			cluster.JoinWorkers()
 		}
 		if *checkstatus {
 			cluster.CheckSkuba()
+		}
+		if *ostkcmd != "" {
+			var cmd *exec.Cmd
+			temp := strings.Split(*ostkcmd, " ")
+			if len(temp) > 1 {
+				cmd = exec.Command(temp[0], temp[1:]...)
+			} else {
+				cmd = exec.Command(temp[0])
+			}
+			out1, out2 := utils.NiceBuffRunner(cmd, utils.Workdir)
+			fmt.Printf("%+v\n  %s\n", out1, out2)
 		}
 		//---------End of Version 4 ----------------------
 	} else {
