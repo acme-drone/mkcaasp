@@ -92,11 +92,12 @@ var (
 	packupd     = flag.String("packupd", "", "triggers transactional-update with auto-approve for 1 single given package")
 	new         = flag.Bool("new", false, "setting up & updating the fresh spawned cluster")
 	uiupd       = flag.Bool("uiupd", false, "triggers updating of the cluster through Velum")
+	diagnostic  = flag.Bool("diagn", false, "triggers diagnostics of every skuba node")
 	test        = flag.String("test", "", "triggers testing of the cluster (by running tests depending on scenario folders)")
 	checkstatus = flag.Bool("status", false, "triggers skuba check status")
 	version     = flag.String("v", "3", "triggers automation on CaaSPv4")
 	ginkgotest  = flag.Bool("ginkgo", false, "triggers ginko testing")
-	//tf = utils.TFParser()
+	proto       = flag.String("proto", "", "used for prototyping new features(triggering functions)")
 	Cluster     *utils.CaaSPCluster
 	tf          *utils.TFOutput
 	Mkcaasproot = ""
@@ -121,7 +122,9 @@ func main() {
 			Mkcaasproot = filepath.Join(MacHomedir, "go/src/mkcaasp")
 			utils.Homedir = MacHomedir
 		}
-		Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos)
+		if sysos == "suse" {
+			Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos)
+		}
 		utils.Config, err = utils.CaaSP4CFG(Mkcaasproot)
 		if err != nil {
 			fmt.Printf("Error while runnign CaaaSP4CFG: %s\n", err)
@@ -178,6 +181,12 @@ func main() {
 		if *checkstatus {
 			cluster.CheckSkuba()
 		}
+		if *diagnostic {
+			cluster.RefreshSkubaCluster()
+			cluster.EnvOSExporter()
+			cluster.CheckSkuba()
+			fmt.Printf("%+v\n", cluster.ClusterCheckBuilder("checks"))
+		}
 		if *ostkcmd != "" {
 			var cmd *exec.Cmd
 			temp := strings.Split(*ostkcmd, " ")
@@ -188,6 +197,11 @@ func main() {
 			}
 			out1, out2 := utils.NiceBuffRunner(cmd, utils.Workdir)
 			fmt.Printf("%+v\n  %s\n", out1, out2)
+		}
+		if *proto != "" {
+			cluster.RefreshSkubaCluster()
+			cluster.EnvOSExporter()
+			cluster.RebootNodes(*proto)
 		}
 		//---------End of Version 4 ----------------------
 	} else {
