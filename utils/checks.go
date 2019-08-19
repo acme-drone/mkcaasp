@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+	"unicode"
 )
 
 func CheckOS() (string, error) {
@@ -191,6 +193,106 @@ func CheckSystemd(node Node) Node {
 	}
 	node.Systemd = systemd
 	return node
+}
+
+///-----------------------WORKS ONLY FOR IPV4--------------------------------------
+func CheckIfIP(IP string) {
+	for _, k := range IP {
+		if unicode.IsDigit(rune(k)) {
+			continue
+		} else {
+			if string(k) == "." {
+				continue
+			} else {
+				log.Fatalf("Please, check your input (should be a [valid] IP adress without pre- or suffixes")
+			}
+		}
+	}
+}
+
+func (cluster *SkubaCluster) RebootNodes(flagg string) (string, string) {
+	cmdargs := []string{"sudo", "reboot", "--reboot"}
+	var out, errstr string
+	switch flagg {
+	case "workers":
+		var cluster SkubaCluster
+		cluster.RefreshSkubaCluster()
+		if Config.Platform == "openstack" {
+			for _, k := range cluster.TF_ostack.IP_Workers.Value {
+				CheckIfIP(k)
+				var a Node
+				a.IP = k
+				a.Username = "sles"
+				command := a.SSHCmd("", cmdargs)
+				out, errstr = NiceBuffRunner(command, "")
+				time.Sleep(60 * time.Second)
+			}
+		}
+		if Config.Platform == "vmware" {
+			for _, k := range cluster.TF_vmware.IP_Workers.Value {
+				CheckIfIP(k)
+				var a Node
+				a.IP = k
+				a.Username = "sles"
+				command := a.SSHCmd("", cmdargs)
+				out, errstr = NiceBuffRunner(command, "")
+			}
+		}
+	case "masters":
+		var cluster SkubaCluster
+		cluster.RefreshSkubaCluster()
+		if Config.Platform == "openstack" {
+			for _, k := range cluster.TF_ostack.IP_Masters.Value {
+				CheckIfIP(k)
+				var a Node
+				a.IP = k
+				a.Username = "sles"
+				command := a.SSHCmd("", cmdargs)
+				out, errstr = NiceBuffRunner(command, "")
+			}
+		}
+		if Config.Platform == "vmware" {
+			for _, k := range cluster.TF_vmware.IP_Masters.Value {
+				CheckIfIP(k)
+				var a Node
+				a.IP = k
+				a.Username = "sles"
+				command := a.SSHCmd("", cmdargs)
+				out, errstr = NiceBuffRunner(command, "")
+			}
+		}
+	case "loadbalancer":
+		var cluster SkubaCluster
+		cluster.RefreshSkubaCluster()
+		if Config.Platform == "openstack" {
+			k := cluster.TF_ostack.IP_Load_Balancer.Value
+			CheckIfIP(k)
+			var a Node
+			a.IP = k
+			a.Username = "sles"
+			command := a.SSHCmd("", cmdargs)
+			out, errstr = NiceBuffRunner(command, "")
+
+		}
+		if Config.Platform == "vmware" {
+			for _, k := range cluster.TF_vmware.IP_Load_Balancer.Value {
+				CheckIfIP(k)
+				var a Node
+				a.IP = k
+				a.Username = "sles"
+				command := a.SSHCmd("", cmdargs)
+				out, errstr = NiceBuffRunner(command, "")
+			}
+		}
+	default:
+		CheckIfIP(flagg)
+		var a Node
+		a.IP = flagg
+		a.Username = "sles"
+		command := a.SSHCmd("", cmdargs)
+		out, errstr = NiceBuffRunner(command, "")
+	}
+	return out, errstr
 }
 
 func (cluster *SkubaCluster) ClusterCheckBuilder(mode string) map[string]Node {
