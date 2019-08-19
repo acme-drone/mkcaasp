@@ -167,7 +167,6 @@ repositories = {
         basesystem_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Basesystem/15-SP1/x86_64/update/",
         containers_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Containers/15-SP1/x86_64/update/",
         serverapps_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Server-Applications/15-SP1/x86_64/update/",
-        caasp_sprint9 = "http://download.suse.de/ibs/SUSE:/Maintenance:/12065/SUSE_SLE-15-SP1_Update_Products_CASP40_Update/",
         caasp_release = "http://download.suse.de/ibs/SUSE:/SLE-15-SP1:/Update:/Products:/CASP40/standard/",
         caasp_update = "http://download.suse.de/ibs/SUSE:/SLE-15-SP1:/Update:/Products:/CASP40:/Update/standard/",
 }
@@ -175,10 +174,10 @@ repositories = {
 # Minimum required packages. Do not remove them.
 # Feel free to add more packages
 packages = [
-  //"patterns-caasp-Node",
+#  //"patterns-caasp-Node",
   "ca-certificates-suse",
-  "kernel-default",
-  "-kernel-default-base"
+#  "kernel-default",
+#  "-kernel-default-base"
 ]
 
 # ssh keys to inject into all the nodes
@@ -277,7 +276,6 @@ repositories = {
   basesystem_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Basesystem/15-SP1/x86_64/update/",
   containers_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Containers/15-SP1/x86_64/update/",
   serverapps_updates = "http://download.suse.de/ibs/SUSE/Updates/SLE-Module-Server-Applications/15-SP1/x86_64/update/",
-  caasp_sprint9 = "http://download.suse.de/ibs/SUSE:/Maintenance:/12065/SUSE_SLE-15-SP1_Update_Products_CASP40_Update/",
   caasp_release = "http://download.suse.de/ibs/SUSE:/SLE-15-SP1:/Update:/Products:/CASP40/standard/",
   caasp_update = "http://download.suse.de/ibs/SUSE:/SLE-15-SP1:/Update:/Products:/CASP40:/Update/standard/",
 }
@@ -286,9 +284,8 @@ repositories = {
 # Feel free to add more packages
 packages = [
   "ca-certificates-suse",
-  "kernel-default",
-  "-kernel-default-base",
- // "patterns-caasp-Node"
+#"kernel-default",
+#"-kernel-default-base",
 ]
 
 # ssh keys to inject into all the nodes
