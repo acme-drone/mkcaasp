@@ -45,7 +45,11 @@ func FolderFinder(sysos string) (string, string) {
 		}
 		//fmt.Println(fmt.Sprintf("%q", string(out)))
 		username := strings.Replace(fmt.Sprintf("%s", string(out)), "\n", "", 1)
-		homefolder = filepath.Join("/home", username)
+		if username == "root" {
+			homefolder = "/root"
+		} else {
+			homefolder = filepath.Join("/home", username)
+		}
 		folderslice := []string{"go/src/mkcaasp", "work/src/mkcaasp", "golang/src/mkcaasp", "go/src/github.com/atighineanu/mkcaasp", "golang/src/github.com/atighineanu/mkcaasp", "work/src/github.com/atighineanu/mkcaasp"}
 		for _, k := range folderslice {
 			cmd = []string{"ls", "-alh", filepath.Join(homefolder, k)}
