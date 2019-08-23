@@ -34,7 +34,7 @@ func CheckOS() (string, error) {
 	return sysos, err
 }
 
-func FolderFinder(sysos string) (string, string) {
+func FolderFinder(sysos string, skubarpm bool) (string, string) {
 	var mkcaasproot, homefolder string
 	switch sysos {
 	case "suse":
@@ -45,7 +45,7 @@ func FolderFinder(sysos string) (string, string) {
 		}
 		//fmt.Println(fmt.Sprintf("%q", string(out)))
 		username := strings.Replace(fmt.Sprintf("%s", string(out)), "\n", "", 1)
-		if username == "root" {
+		if username == "root" || skubarpm {
 			homefolder = "/root"
 		} else {
 			homefolder = filepath.Join("/home", username)
