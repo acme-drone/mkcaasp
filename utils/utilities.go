@@ -40,6 +40,7 @@ func SetOSEnv(file string) (EnvOS, error) {
 		"OS_USERNAME=" + auth.Username,
 		"OS_PASSWORD=" + auth.Password, //Dehashinator("./../", "./"),    auth.Password,
 		"OS_PROJECT_ID=" + auth.ProjectID,
+		"OS_INSECURE" + auth.Insecure,
 	}
 	ENV = env
 	return env, nil
