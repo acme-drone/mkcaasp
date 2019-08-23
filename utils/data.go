@@ -11,6 +11,7 @@ type OSAPI struct {
 	Username           string
 	Password           string //[]byte
 	ProjectID          string
+	Insecure	   string
 }
 
 // EnvOS holds as slice with openstack API variables
