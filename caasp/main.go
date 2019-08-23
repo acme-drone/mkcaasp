@@ -124,7 +124,7 @@ func main() {
 			utils.Homedir = MacHomedir
 		}
 		if sysos == "suse" {
-			Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos)
+			Mkcaasproot, utils.Homedir = utils.FolderFinder(sysos, *skubapackage)
 		}
 		utils.Config, err = utils.CaaSP4CFG(Mkcaasproot)
 		if err != nil {
