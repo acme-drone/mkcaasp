@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 )
 
 var Cluster CaaSPCluster
@@ -38,15 +40,26 @@ func SetOSEnv(file string) (EnvOS, error) {
 		"OS_USERNAME=" + auth.Username,
 		"OS_PASSWORD=" + auth.Password, //Dehashinator("./../", "./"),    auth.Password,
 		"OS_PROJECT_ID=" + auth.ProjectID,
+		"OS_INSECURE" + auth.Insecure,
 	}
 	ENV = env
 	return env, nil
 }
 
-func (s *CAASPOut) SSHCommand(cmd ...string) *exec.Cmd {
+func (s *SaltCluster) SSHCmd(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
 	arg := append(
-		[]string{"-o", "StrictHostKeyChecking=no",
-			fmt.Sprintf("root@%s", s.IPAdminExt.Value),
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
+			fmt.Sprintf("root@%s", IP),
+		},
+		cmd...,
+	)
+	return exec.Command("ssh", arg...)
+}
+
+func (s *CAASPOut) SSHCommand(IP string, homedir string, caaspdir string, cmd ...string) *exec.Cmd {
+	arg := append(
+		[]string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile /dev/null", "-i", filepath.Join(homedir, caaspdir, "ssh/id_caasp"),
+			fmt.Sprintf("root@%s", IP),
 		},
 		cmd...,
 	)
@@ -74,13 +87,42 @@ func CAASPOutReturner(openstack string, homedir string, caaspDir string) *CAASPO
 	return &a
 }
 
-func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
+func NiceBufRunner(cmd *exec.Cmd) (string, string) {
+	var stdoutBuf, stderrBuf bytes.Buffer
+	newEnv := append(os.Environ(), ENV...)
+	cmd.Env = newEnv
+	stdoutIn, _ := cmd.StdoutPipe()
+	stderrIn, _ := cmd.StderrPipe()
+	var errStdout, errStderr error
+	stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
+	stderr := io.MultiWriter(os.Stderr, &stderrBuf)
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
+	}
+	go func() {
+		_, errStdout = io.Copy(stdout, stdoutIn)
+	}()
+	go func() {
+		_, errStderr = io.Copy(stderr, stderrIn)
+	}()
+	err = cmd.Wait()
+	if err != nil {
+		return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
+	}
+	if errStdout != nil || errStderr != nil {
+		log.Fatal("AdminOrchCmd -> update: failed to capture stdout or stderr\n")
+	}
+	return stdoutBuf.String(), stderrBuf.String()
+}
+
+func AdminOrchCmd(homedir string, caaspdir string, s *CAASPOut, option string, command string) (string, string) {
 	var err error
 	alias := []string{"docker", "exec", "$(docker ps -q --filter name=salt-master)", "salt", "-P", "\"roles:admin|kube-master|kube-minion\""}
 	//------------sweeping through options...
 	if option == "refresh" {
 		cmd := append(alias, "saltutil.refresh_grains")
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -88,7 +130,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "command" {
 		cmd := append(alias, "cmd.run", "'"+command+"'")
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -96,7 +138,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "disable" {
 		cmd := append(alias, []string{"cmd.run", "'systemctl disable --now transactional-update.timer'"}...)
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -105,7 +147,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	if option == "register" {
 		cmdtorun := "'transactional-update register -r " + command + "'"
 		cmd := append(alias, []string{"cmd.run", cmdtorun}...)
-		out, err := s.SSHCommand(cmd...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmd...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "ssh command didn't run as expected: %s\n", err)
 		}
@@ -113,7 +155,7 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "addrepo" {
 		cmdtorun := append(alias, "cmd.run 'zypper ar "+command+"'")
-		out, err := s.SSHCommand(cmdtorun...).CombinedOutput()
+		out, err := s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...).CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "AdmOrchCmd -> addrepo: ssh command didn't run as expected: %s\n", err)
 		}
@@ -122,95 +164,108 @@ func AdminOrchCmd(s *CAASPOut, option string, command string) (string, string) {
 	}
 	if option == "update" || option == "packupdate" {
 		var cmd *exec.Cmd
-		var stdoutBuf, stderrBuf bytes.Buffer
 		//----------system update and updating a development package have slightly different workflow
+		transactupdconf := []string{"REBOOT_METHOD=salt", "ZYPPER_AUTO_IMPORT_KEYS=1"}
+		for i := 0; i < len(transactupdconf); i++ {
+			if i == 0 {
+				AdminOrchCmd(homedir, caaspdir, s, "command", "echo "+transactupdconf[i]+" > /etc/transactional-update.conf")
+			} else {
+				AdminOrchCmd(homedir, caaspdir, s, "command", "echo "+transactupdconf[i]+" >> /etc/transactional-update.conf")
+			}
+		}
+
 		if option == "update" {
 			cmdtorun := append(alias, []string{"cmd.run", "'transactional-update cleanup dup reboot'"}...)
-			cmd = s.SSHCommand(cmdtorun...)
+			cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 		} else {
 			//-------if package -> first setting transact-up.conf to allow automatic -y accept development packages
-			transactupdconf := []string{"REBOOT_METHOD=salt", "ZYPPER_AUTO_IMPORT_KEYS=1"}
-			for i := 0; i < len(transactupdconf); i++ {
-				if i == 0 {
-					AdminOrchCmd(s, "command", "echo "+transactupdconf[i]+" > /etc/transactional-update.conf")
-				} else {
-					AdminOrchCmd(s, "command", "echo "+transactupdconf[i]+" >> /etc/transactional-update.conf")
-				}
-			}
-			out, err := AdminOrchCmd(s, "command", "cat /etc/transactional-update.conf")
+			out, err := AdminOrchCmd(homedir, caaspdir, s, "command", "cat /etc/transactional-update.conf")
 			if !strings.Contains(err, "nil") {
 				return out, err
 			}
 			if strings.Contains(out, "REBOOT_METHOD=salt") && strings.Contains(out, "ZYPPER_AUTO_IMPORT_KEYS=1") {
 				cmdtorun := append(alias, []string{"cmd.run", "'transactional-update", "reboot", "pkg", "install", "-y", command + "'"}...)
-				cmd = s.SSHCommand(cmdtorun...)
+				cmd = s.SSHCommand(s.IPAdminExt.Value, homedir, caaspdir, cmdtorun...)
 			} else {
 				log.Fatalf("AdminOrchCmd->package update: the trans-update.conf file not properly set up: %s\n", out)
 			}
 		}
-		newEnv := append(os.Environ(), ENV...)
-		cmd.Env = newEnv
-		stdoutIn, _ := cmd.StdoutPipe()
-		stderrIn, _ := cmd.StderrPipe()
-		var errStdout, errStderr error
-		stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
-		stderr := io.MultiWriter(os.Stderr, &stderrBuf)
-		err := cmd.Start()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		go func() {
-			_, errStdout = io.Copy(stdout, stdoutIn)
-		}()
-		go func() {
-			_, errStderr = io.Copy(stderr, stderrIn)
-		}()
-		err = cmd.Wait()
-		if err != nil {
-			return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
-		}
-		if errStdout != nil || errStderr != nil {
-			log.Fatal("AdminOrchCmd -> update: failed to capture stdout or stderr\n")
-		}
-		return stdoutBuf.String(), stderrBuf.String()
+		out, err := NiceBufRunner(cmd)
+		return out, err
 	}
 	if option == "new" {
-		AdminOrchCmd(s, "register", command)
-		AdminOrchCmd(s, "disable", "")
-		AdminOrchCmd(s, "update", "")
-		AdminOrchCmd(s, "refresh", "")
+		AdminOrchCmd(homedir, caaspdir, s, "register", command)
+		time.Sleep(10 * time.Second)
+		AdminOrchCmd(homedir, caaspdir, s, "disable", "")
+		time.Sleep(10 * time.Second)
+		AdminOrchCmd(homedir, caaspdir, s, "update", "")
+		time.Sleep(20 * time.Second)
+		AdminOrchCmd(homedir, caaspdir, s, "refresh", "")
 	}
 	return fmt.Sprintf("%s", os.Stdout), fmt.Sprintf("%s", err)
 }
 
-func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *CaaSPCluster {
-	var err error
-	temp := strings.Split(append, "")
-	if len(temp) > 4 {
-		log.Fatalf("Check your syntaxis...there must be just four symbols in -addnodes argument\n(Negative or double digit values not supported...)")
-	} else {
-		//-------------------PARSING the argument of -addnodes or -nodes
-		for i := 0; i < len(temp); i++ {
-			if temp[i] == "w" {
-				if len(temp) >= i+2 {
-					Cluster.WorkCount, err = strconv.Atoi(temp[i+1])
+func AppendParse(appendnodes string) (int, int) {
+	append := strings.Split(appendnodes, "")
+	var count, tmp, workers, masters int
+	for i := 0; i < len(append); i++ {
+		if append[i] == "w" {
+			for {
+				count++
+				if i+count > len(append)-1 {
+					workers = tmp
+					break
+				}
+				r := []rune(append[i+count])
+				if !unicode.IsDigit(r[0]) {
+					workers = tmp
+					break
+				} else {
+					add, err := strconv.Atoi(append[i+count])
 					if err != nil {
-						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.WorkCount: error while strconv.\n%s", err)
+						fmt.Println("error! %s", err)
 					}
-					fmt.Printf("Adding %v workers.\n", Cluster.WorkCount)
+					if count > 1 {
+						tmp *= 10
+					}
+					tmp += add
 				}
 			}
-			if temp[i] == "m" {
-				if len(temp) >= i+2 {
-					Cluster.MastCount, err = strconv.Atoi(temp[i+1])
+		}
+		count = 0
+		tmp = 0
+		if append[i] == "m" {
+			for {
+				count++
+				if i+count > len(append)-1 {
+					masters = tmp
+					break
+				}
+				r := []rune(append[i+count])
+				if !unicode.IsDigit(r[0]) {
+					masters = tmp
+					break
+				} else {
+					add, err := strconv.Atoi(append[i+count])
 					if err != nil {
-						fmt.Fprintf(os.Stdout, "NodesAdder->Converting Cluster.MastCount: error while strconv.\n%s", err)
+						fmt.Println("error! %s", err)
 					}
-					fmt.Printf("Adding %v masters.\n", Cluster.MastCount)
+					if count > 1 {
+						tmp *= 10
+					}
+					tmp += add
 				}
 			}
 		}
 	}
+	return masters, workers
+}
+
+func NodesAdder(dir string, append string, nodes *CAASPOut, Firsttime bool) *CaaSPCluster {
+	var err error
+	//-------------------PARSING the argument of -addnodes or -nodes
+	Cluster.MastCount, Cluster.WorkCount = AppendParse(append)
+	fmt.Printf("adding:\n%v masters\n%v workers\n", Cluster.MastCount, Cluster.WorkCount)
 
 	//------------Calculating the value Cluster.Diff (delta of nodes compared to actual cluster state),
 	//            on which logic of velum.Uiinst function is working...

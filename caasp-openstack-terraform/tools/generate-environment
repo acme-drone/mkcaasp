@@ -1,0 +1,59 @@
+#!/bin/bash
+set -eu
+
+DIR="$( cd "$( dirname "$0" )" && pwd )"
+
+# environment file, provided as the first argument
+ENVIRONMENT=${1:-${ENVIRONMENT:-"$DIR/../environment.json"}}
+
+# ssh key file
+SSH_KEY=${SSH_KEY:-$DIR/../ssh/id_caasp}
+
+# terraform state file
+TF_STATE=${TF_STATE:-$DIR/../terraform.tfstate}
+
+##############################################################
+
+SSH_ARGS="-i $SSH_KEY \
+         -o UserKnownHostsFile=/dev/null \
+         -o StrictHostKeyChecking=no"
+
+command -v jq >/dev/null || {
+    echo "ERROR: jq is not installed - please install jq to generate the environment.json file"
+    exit 1
+}
+
+# make sure the ssh key is readable
+[ -f "$SSH_KEY" ] || { echo "No ssh key found at $SSH_KEY" ; exit 1 ; }
+chmod 600 "$SSH_KEY"
+
+echo "Generating $ENVIRONMENT file"
+
+# Floating IPs are a separate resource so we need to get them first
+floating_ips=$(cat $TF_STATE | \
+    jq ".modules[].resources[] | select(.type==\"openstack_compute_floatingip_associate_v2\") | .primary | .attributes | { floating_ip, id: .instance_id } " | jq -s .)
+
+combined_list=$(cat $TF_STATE | \
+    jq ".modules[].resources[] | select(.type==\"openstack_compute_instance_v2\") | .primary | .attributes" | jq -s .)
+
+# We are going to use floating IP as FQDN because we do not have DNS
+out=$(echo $combined_list $floating_ips | jq -s 'add' | jq "group_by(.id) | .[] | .[0] + .[1] | { fqdn: .name, addresses: { publicIpv4: .floating_ip, privateIpv4: .access_ip_v4 }, role: .name | split(\"-\") | .[1], index: (if (.name | split(\"-\") | .[2]) == null then 0 else .name | split(\"-\") | .[2] end) , status: \"unused\" }"  | jq -s . | jq "{ minions: . }")
+
+for node in $(echo "$out" | jq -r '.minions[] | select(.["minion_id"]? == null) | [.addresses.publicIpv4] | join(" ")'); do
+    # The node may not have fully booted yet
+    x=0
+    while [ $x -le 10 ]; do
+        nc -z $node 22 && break
+        sleep 10
+        x=$(( $x + 1 ))
+    done
+    machine_id=$(ssh root@$node $SSH_ARGS cat /etc/machine-id)
+    out=$(echo "$out" | jq ".minions | map(if (.addresses.publicIpv4 == \"$node\") then . + {\"minionId\": \"$machine_id\"} else . end) | {minions: .}")
+done
+
+masters=$(echo "$out" | jq -r '[.minions[] | select(.role=="master")] | length')
+
+out=$(echo "$out" | jq " . + {dashboardHost: .minions[] | select(.role==\"admin\") | .addresses.publicIpv4, dashboardExternalHost: .minions[] | select(.role==\"admin\") | .addresses.publicIpv4, kubernetesExternalHost: .minions[] | select(.role==\"master\") | .addresses.publicIpv4}")
+out=$(echo "$out" | jq " . + {sshKey: \"$SSH_KEY\", sshUser: \"root\"}")
+
+echo "$out" | tee "$ENVIRONMENT"

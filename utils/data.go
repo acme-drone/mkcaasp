@@ -11,10 +11,19 @@ type OSAPI struct {
 	Username           string
 	Password           string //[]byte
 	ProjectID          string
+	Insecure	   string
 }
 
 // EnvOS holds as slice with openstack API variables
 type EnvOS []string
+
+// SaltCluster connects hashname of all nodes + hostname and IPs all together
+type SaltCluster struct {
+	Name           string
+	IP             string
+	RebootNeeded   bool
+	FailedServices int
+}
 
 // CAASPOut is holding caasp terraform output json variables
 type CAASPOut struct {
@@ -43,6 +52,7 @@ type Machines struct {
 	Value []string
 }
 
+// CaSPCluster is holding all opentsack.tfvars info
 type CaaSPCluster struct {
 	ImageName string
 	IntNet    string

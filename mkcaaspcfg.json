@@ -1,0 +1,21 @@
+{
+    "platform": "vmware",
+    "deploy": "terraform",
+    "vmware": {
+        "GOVC_URL": "jazz.qa.prv.suse.net",
+        "GOVC_USERNAME": "YOUR_USERNAME@jazz.qa.prv.suse.net",
+        "GOVC_PASSWORD": "vmware_pass",
+        "GOVC_INSECURE": 1,
+        "VSPHERE_SERVER": "jazz.qa.prv.suse.net",
+        "VSPHERE_USER":  "YOUR_USERNAME@jazz.qa.prv.suse.net",
+        "VSPHERE_PASSWORD": "vmware_pass",
+        "VSPHERE_ALLOW_UNVERIFIED_SSL": true
+    },
+    "skubaroot": "yout skuba root",
+    "mkcaasproot": "your mkcaasp root",
+    "clustername": "imba-cluster",
+    "setup": {
+        "MastCount": 1,
+        "WorkCount": 2
+    }
+}
